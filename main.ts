@@ -252,21 +252,13 @@ async function initializeKv(): Promise<void> {
 
 if ("cron" in Deno && typeof Deno.cron === "function") {
   Deno.cron("cron-heartbeat", "* * * * *", async () => {
-    if (!kv && "openKv" in Deno && typeof Deno.openKv === "function") {
-      try {
-        kv = await Deno.openKv();
-      } catch (err) {
-        console.error("[Cron] openKv 失败:", getErrorMessage(err));
-      }
-    }
-
-    if (kv) {
-      try {
-        await kv.set(["stats", "last_cron_tick"], new Date().toISOString());
-        console.log("[Cron] 心跳刷新成功");
-      } catch (err) {
-        console.error("[Cron] 心跳刷新失败:", getErrorMessage(err));
-      }
+    try {
+      const cronKv = await Deno.openKv();
+      const nowIso = new Date().toISOString();
+      await cronKv.set(["stats", "last_cron_tick"], nowIso);
+      console.log("[Cron Heartbeat Success]", nowIso);
+    } catch (err) {
+      console.error("[Cron Heartbeat Error]", getErrorMessage(err));
     }
   });
 }
@@ -1479,7 +1471,10 @@ const PAGE_HTML = `<!DOCTYPE html>
       <div class="card">
         <div class="card-title">
           <span>Cron 心跳运行状态</span>
-          <button id="cron-refresh-btn" type="button" style="font-size:12px; padding:6px 12px;">🔄 刷新状态</button>
+          <div style="display:flex; gap:8px;">
+            <button id="cron-trigger-btn" type="button" style="font-size:12px; padding:6px 12px;">⚡ 立即触发测试心跳</button>
+            <button id="cron-refresh-btn" type="button" style="font-size:12px; padding:6px 12px; background:rgba(255,255,255,0.1); color:var(--text);">🔄 刷新状态</button>
+          </div>
         </div>
         <div class="stats-grid">
           <div class="stat-card">
@@ -1645,6 +1640,20 @@ const PAGE_HTML = `<!DOCTYPE html>
     cronRefreshBtn.addEventListener("click", function () {
       setText("cron-tick", "查询中...");
       loadOverview();
+    });
+  }
+
+  var cronTriggerBtn = byId("cron-trigger-btn");
+  if (cronTriggerBtn) {
+    cronTriggerBtn.addEventListener("click", function () {
+      setText("cron-tick", "触发中...");
+      requestJson("/api/cron-tick", { method: "POST" }).then(function (res) {
+        if (res.lastCronTick) {
+          setText("cron-tick", new Date(res.lastCronTick).toLocaleString() + " (手动触发成功)");
+        }
+      }).catch(function (err) {
+        setText("cron-tick", "触发失败: " + err.message);
+      });
     });
   }
 
@@ -1867,22 +1876,15 @@ const PAGE_HTML = `<!DOCTYPE html>
 // -----------------------------------------------------------------------------
 
 async function getDiagnostics() {
-  if (!kv && "openKv" in Deno && typeof Deno.openKv === "function") {
-    try {
-      kv = await Deno.openKv();
-    } catch {
-      // 容错处理
-    }
-  }
-
   let lastCronTick: string | null = null;
-  if (kv) {
-    try {
-      const entry = await kv.get<string>(["stats", "last_cron_tick"]);
+  try {
+    const diagKv = kv ?? (await Deno.openKv());
+    const entry = await diagKv.get<string>(["stats", "last_cron_tick"]);
+    if (entry && entry.value) {
       lastCronTick = entry.value;
-    } catch {
-      lastCronTick = null;
     }
+  } catch (err) {
+    console.error("[Diagnostics Read Error]", err);
   }
 
   return {
@@ -1958,6 +1960,22 @@ async function handleRequest(req: Request): Promise<Response> {
 
     const diag = await getDiagnostics();
     return jsonResponse(diag);
+  }
+
+  // 手动触发模拟 Cron 心跳 API
+  if (pathname === "/api/cron-tick") {
+    if (req.method !== "POST") {
+      return methodNotAllowed(["POST"]);
+    }
+
+    try {
+      const tickKv = kv ?? (await Deno.openKv());
+      const nowIso = new Date().toISOString();
+      await tickKv.set(["stats", "last_cron_tick"], nowIso);
+      return jsonResponse({ status: "ok", lastCronTick: nowIso });
+    } catch (err) {
+      return jsonResponse({ error: getErrorMessage(err) }, { status: 500 });
+    }
   }
 
   // Web Crypto HMAC 安全验签 API
