@@ -34,23 +34,36 @@ declare namespace Deno {
 
   export interface Kv {
     get<T = unknown>(key: unknown[]): Promise<KvEntry<T>>;
-    getMany<T extends readonly unknown[]>(keys: { [K in keyof T]: unknown[] }): Promise<{ [K in keyof T]: KvEntry<T[K]> }>;
+    getMany<T extends readonly unknown[]>(keys: { [K in keyof T]: unknown[] }): Promise<{
+      [K in keyof T]: KvEntry<T[K]>;
+    }>;
     set(key: unknown[], value: unknown, options?: { expireIn?: number }): Promise<KvCommitResult>;
     delete(key: unknown[]): Promise<void>;
-    list<T = unknown>(selector: { prefix: unknown[] }, options?: KvListOptions): AsyncIterableIterator<KvEntry<T>>;
+    list<T = unknown>(
+      selector: { prefix: unknown[] },
+      options?: KvListOptions,
+    ): AsyncIterableIterator<KvEntry<T>>;
     atomic(): AtomicOperation;
-    watch<T extends readonly unknown[]>(keys: { [K in keyof T]: unknown[] }): AsyncIterableIterator<{ [K in keyof T]: KvEntry<T[K]> }>;
+    watch<T extends readonly unknown[]>(keys: {
+      [K in keyof T]: unknown[];
+    }): AsyncIterableIterator<{ [K in keyof T]: KvEntry<T[K]> }>;
     close(): void;
   }
 
   export function openKv(path?: string): Promise<Kv>;
 
   export function serve(handler: (req: Request, info?: any) => Response | Promise<Response>): any;
-  export function serve(options: { port?: number; hostname?: string }, handler: (req: Request, info?: any) => Response | Promise<Response>): any;
+  export function serve(
+    options: { port?: number; hostname?: string },
+    handler: (req: Request, info?: any) => Response | Promise<Response>,
+  ): any;
 
   export function cron(name: string, spec: string, handler: () => void | Promise<void>): void;
 
-  export function upgradeWebSocket(req: Request, options?: any): {
+  export function upgradeWebSocket(
+    req: Request,
+    options?: any,
+  ): {
     socket: WebSocket;
     response: Response;
   };

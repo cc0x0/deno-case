@@ -21,11 +21,13 @@
 ## 🛠️ 本地开发与校验
 
 ### 安装依赖 (用于 Node / npm 检查环境)
+
 ```bash
 npm install
 ```
 
 ### 语法与类型校验 (ESLint & TypeScript)
+
 ```bash
 # 运行 ESLint 代码检查
 npm run lint
@@ -38,6 +40,7 @@ npm run check
 ```
 
 ### 运行服务 (基于 Deno)
+
 ```bash
 # 启动本地开发服务
 deno task dev

@@ -59,10 +59,7 @@ function utf8Length(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
 
-function jsonResponse(
-  data: unknown,
-  init: ResponseInit = {},
-): Response {
+function jsonResponse(data: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
 
   headers.set("content-type", "application/json; charset=utf-8");
@@ -97,52 +94,30 @@ function getClientAddress(req: Request): string {
     return forwarded.split(",")[0]?.trim() || "unknown";
   }
 
-  return req.headers.get("x-real-ip") ??
-    req.headers.get("cf-connecting-ip") ??
-    "unknown";
+  return req.headers.get("x-real-ip") ?? req.headers.get("cf-connecting-ip") ?? "unknown";
 }
 
-async function readTextBody(
-  req: Request,
-  maxBytes: number,
-): Promise<string> {
-  const contentLength = Number(
-    req.headers.get("content-length") ?? "0",
-  );
+async function readTextBody(req: Request, maxBytes: number): Promise<string> {
+  const contentLength = Number(req.headers.get("content-length") ?? "0");
 
-  if (
-    Number.isFinite(contentLength) &&
-    contentLength > maxBytes
-  ) {
-    throw new HttpError(
-      413,
-      `请求体不能超过 ${maxBytes} 字节`,
-    );
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    throw new HttpError(413, `请求体不能超过 ${maxBytes} 字节`);
   }
 
   const body = await req.text();
 
   if (utf8Length(body) > maxBytes) {
-    throw new HttpError(
-      413,
-      `请求体不能超过 ${maxBytes} 字节`,
-    );
+    throw new HttpError(413, `请求体不能超过 ${maxBytes} 字节`);
   }
 
   return body;
 }
 
-async function readJsonBody(
-  req: Request,
-  maxBytes: number,
-): Promise<unknown> {
+async function readJsonBody(req: Request, maxBytes: number): Promise<unknown> {
   const contentType = req.headers.get("content-type") ?? "";
 
   if (!contentType.toLowerCase().includes("application/json")) {
-    throw new HttpError(
-      415,
-      "Content-Type 必须是 application/json",
-    );
+    throw new HttpError(415, "Content-Type 必须是 application/json");
   }
 
   const raw = await readTextBody(req, maxBytes);
@@ -169,12 +144,7 @@ type RateLimitRecord = {
 
 const rateLimits = new Map<string, RateLimitRecord>();
 
-function checkRateLimit(
-  req: Request,
-  bucket: string,
-  limit: number,
-  windowMs: number,
-): void {
+function checkRateLimit(req: Request, bucket: string, limit: number, windowMs: number): void {
   const now = Date.now();
   const key = `${bucket}:${getClientAddress(req)}`;
 
@@ -191,18 +161,11 @@ function checkRateLimit(
   rateLimits.set(key, record);
 
   if (record.count > limit) {
-    const retryAfter = Math.max(
-      1,
-      Math.ceil((record.resetAt - now) / 1000),
-    );
+    const retryAfter = Math.max(1, Math.ceil((record.resetAt - now) / 1000));
 
-    throw new HttpError(
-      429,
-      `请求过于频繁，请在 ${retryAfter} 秒后重试`,
-      {
-        "retry-after": String(retryAfter),
-      },
-    );
+    throw new HttpError(429, `请求过于频繁，请在 ${retryAfter} 秒后重试`, {
+      "retry-after": String(retryAfter),
+    });
   }
 
   if (rateLimits.size > 5_000) {
@@ -270,18 +233,13 @@ if ("cron" in Deno && typeof Deno.cron === "function") {
 async function bumpVisits(): Promise<bigint | null> {
   if (!kv) return null;
 
-  const result = await kv.atomic()
-    .sum(["stats", "visits"], 1n)
-    .commit();
+  const result = await kv.atomic().sum(["stats", "visits"], 1n).commit();
 
   if (!result.ok) {
     throw new Error("KV 原子计数提交失败");
   }
 
-  const current = await kv.get<Deno.KvU64>([
-    "stats",
-    "visits",
-  ]);
+  const current = await kv.get<Deno.KvU64>(["stats", "visits"]);
 
   return current.value?.value ?? 0n;
 }
@@ -297,10 +255,7 @@ type GuestbookEntry = {
   ts: number;
 };
 
-async function addGuestbookEntry(
-  name: string,
-  text: string,
-): Promise<GuestbookEntry | null> {
+async function addGuestbookEntry(name: string, text: string): Promise<GuestbookEntry | null> {
   if (!kv) return null;
 
   const id = crypto.randomUUID();
@@ -313,37 +268,27 @@ async function addGuestbookEntry(
     ts,
   };
 
-  await kv.set(
-    ["guestbook-v2", ts, id],
-    entry,
-  );
+  await kv.set(["guestbook-v2", ts, id], entry);
 
   return entry;
 }
 
-async function listGuestbook(
-  limit = 20,
-): Promise<GuestbookEntry[] | null> {
+async function listGuestbook(limit = 20): Promise<GuestbookEntry[] | null> {
   if (!kv) return null;
 
-  const safeLimit = Math.max(
-    1,
-    Math.min(Math.floor(limit), 50),
-  );
+  const safeLimit = Math.max(1, Math.min(Math.floor(limit), 50));
 
   const entries: GuestbookEntry[] = [];
 
-  for await (
-    const item of kv.list<GuestbookEntry>(
-      {
-        prefix: ["guestbook-v2"],
-      },
-      {
-        reverse: true,
-        limit: safeLimit,
-      },
-    )
-  ) {
+  for await (const item of kv.list<GuestbookEntry>(
+    {
+      prefix: ["guestbook-v2"],
+    },
+    {
+      reverse: true,
+      limit: safeLimit,
+    },
+  )) {
     const value = item.value;
 
     if (
@@ -364,10 +309,7 @@ async function listGuestbook(
 // SSE 流式响应
 // -----------------------------------------------------------------------------
 
-function createSseStream(
-  text: string,
-  signal: AbortSignal,
-): ReadableStream<Uint8Array> {
+function createSseStream(text: string, signal: AbortSignal): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const characters = Array.from(text);
 
@@ -390,11 +332,7 @@ function createSseStream(
         return;
       }
 
-      signal.addEventListener(
-        "abort",
-        handleAbort,
-        { once: true },
-      );
+      signal.addEventListener("abort", handleAbort, { once: true });
     },
 
     async pull(controller) {
@@ -405,9 +343,7 @@ function createSseStream(
       if (index >= characters.length) {
         stopped = true;
         try {
-          controller.enqueue(
-            encoder.encode("event: done\ndata: {}\n\n"),
-          );
+          controller.enqueue(encoder.encode("event: done\ndata: {}\n\n"));
           controller.close();
         } catch {
           // 忽略已关闭的情况
@@ -419,9 +355,7 @@ function createSseStream(
       const payload = JSON.stringify({ chunk });
 
       try {
-        controller.enqueue(
-          encoder.encode(`data: ${payload}\n\n`),
-        );
+        controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
       } catch {
         stopped = true;
         return;
@@ -466,48 +400,25 @@ type SystemRealtimeMessage = {
   ts: number;
 };
 
-type RealtimeMessage =
-  | ChatRealtimeMessage
-  | SystemRealtimeMessage;
+type RealtimeMessage = ChatRealtimeMessage | SystemRealtimeMessage;
 
 const clients = new Map<string, WebSocketClient>();
 
 function randomName(): string {
-  const adjectives = [
-    "敏捷的",
-    "神秘的",
-    "闪电",
-    "深海",
-    "静谧的",
-    "赛博",
-    "量子",
-  ];
+  const adjectives = ["敏捷的", "神秘的", "闪电", "深海", "静谧的", "赛博", "量子"];
 
-  const nouns = [
-    "恐龙",
-    "旅人",
-    "信使",
-    "浣熊",
-    "游侠",
-    "观察者",
-    "锦鲤",
-  ];
+  const nouns = ["恐龙", "旅人", "信使", "浣熊", "游侠", "观察者", "锦鲤"];
 
-  const adjective =
-    adjectives[Math.floor(Math.random() * adjectives.length)];
+  const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
 
-  const noun =
-    nouns[Math.floor(Math.random() * nouns.length)];
+  const noun = nouns[Math.floor(Math.random() * nouns.length)];
 
   const suffix = Math.floor(Math.random() * 100);
 
   return `${adjective}${noun}${suffix}`;
 }
 
-function sendSocket(
-  socket: WebSocket,
-  payload: unknown,
-): void {
+function sendSocket(socket: WebSocket, payload: unknown): void {
   if (socket.readyState !== WebSocket.OPEN) {
     return;
   }
@@ -531,9 +442,7 @@ function sendLocalPresence(): void {
   }
 }
 
-function broadcastToLocalClients(
-  message: RealtimeMessage,
-): void {
+function broadcastToLocalClients(message: RealtimeMessage): void {
   for (const [clientId, client] of clients) {
     if (message.type === "chat") {
       sendSocket(client.socket, {
@@ -555,9 +464,7 @@ function broadcastToLocalClients(
   }
 }
 
-function publishRealtime(
-  message: RealtimeMessage,
-): void {
+function publishRealtime(message: RealtimeMessage): void {
   broadcastToLocalClients(message);
 
   if (kv) {
@@ -595,23 +502,16 @@ await initializeKv();
 function handleWebSocket(req: Request): Response {
   const upgrade = req.headers.get("upgrade");
 
-  if (
-    !upgrade ||
-    upgrade.toLowerCase() !== "websocket"
-  ) {
-    return new Response(
-      "Expected WebSocket upgrade",
-      {
-        status: 426,
-        headers: {
-          upgrade: "websocket",
-        },
+  if (!upgrade || upgrade.toLowerCase() !== "websocket") {
+    return new Response("Expected WebSocket upgrade", {
+      status: 426,
+      headers: {
+        upgrade: "websocket",
       },
-    );
+    });
   }
 
-  const { socket, response } =
-    Deno.upgradeWebSocket(req);
+  const { socket, response } = Deno.upgradeWebSocket(req);
 
   const clientId = crypto.randomUUID();
   const name = randomName();
@@ -644,9 +544,7 @@ function handleWebSocket(req: Request): Response {
     sendLocalPresence();
   };
 
-  socket.onmessage = (
-    event: MessageEvent,
-  ) => {
+  socket.onmessage = (event: MessageEvent) => {
     try {
       if (typeof event.data !== "string") {
         sendSocket(socket, {
@@ -657,10 +555,7 @@ function handleWebSocket(req: Request): Response {
         return;
       }
 
-      if (
-        utf8Length(event.data) >
-          MAX_WS_FRAME_BYTES
-      ) {
+      if (utf8Length(event.data) > MAX_WS_FRAME_BYTES) {
         sendSocket(socket, {
           type: "system",
           text: "消息数据过大",
@@ -671,10 +566,7 @@ function handleWebSocket(req: Request): Response {
 
       const now = Date.now();
 
-      if (
-        now - messageWindowStartedAt >=
-          10_000
-      ) {
+      if (now - messageWindowStartedAt >= 10_000) {
         messageWindowStartedAt = now;
         messageCount = 0;
       }
@@ -690,16 +582,11 @@ function handleWebSocket(req: Request): Response {
         return;
       }
 
-      const parsed = JSON.parse(
-        event.data,
-      ) as {
+      const parsed = JSON.parse(event.data) as {
         text?: unknown;
       };
 
-      const text = normalizeText(
-        parsed.text,
-        MAX_CHAT_TEXT_LENGTH,
-      );
+      const text = normalizeText(parsed.text, MAX_CHAT_TEXT_LENGTH);
 
       if (!text) return;
 
@@ -721,11 +608,7 @@ function handleWebSocket(req: Request): Response {
   };
 
   socket.onerror = (event) => {
-    console.error(
-      "[WebSocket] 连接异常:",
-      clientId,
-      event,
-    );
+    console.error("[WebSocket] 连接异常:", clientId, event);
   };
 
   socket.onclose = () => {
@@ -2092,10 +1975,7 @@ async function getDiagnostics() {
 function withSecurityHeaders(response: Response): Response {
   const headers = new Headers(response.headers);
 
-  headers.set(
-    "strict-transport-security",
-    "max-age=63072000; includeSubDomains; preload",
-  );
+  headers.set("strict-transport-security", "max-age=63072000; includeSubDomains; preload");
   headers.set("x-content-type-options", "nosniff");
   headers.set("x-frame-options", "DENY");
   headers.set("referrer-policy", "strict-origin-when-cross-origin");
@@ -2166,7 +2046,8 @@ async function handleRequest(req: Request): Promise<Response> {
     }
 
     const systemPrompt = normalizeText(
-      body.systemPrompt || "你是一个精通 Deno、TypeScript 与边缘计算的高级 Web 技术专家助手，回答简明扼要。",
+      body.systemPrompt ||
+        "你是一个精通 Deno、TypeScript 与边缘计算的高级 Web 技术专家助手，回答简明扼要。",
       500,
     );
 
@@ -2175,10 +2056,7 @@ async function handleRequest(req: Request): Promise<Response> {
 
     // 计算 SHA-256 哈希用于 Deno KV 缓存
     const cacheKeyRaw = `${systemPrompt}::${prompt.toLowerCase()}`;
-    const hashBuffer = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(cacheKeyRaw),
-    );
+    const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(cacheKeyRaw));
     const hashHex = Array.from(new Uint8Array(hashBuffer))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
@@ -2217,7 +2095,7 @@ async function handleRequest(req: Request): Promise<Response> {
         const aiRes = await fetch(targetUrl, {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${apiKey}`,
+            Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -2232,15 +2110,11 @@ async function handleRequest(req: Request): Promise<Response> {
 
         if (!aiRes.ok) {
           const errText = await aiRes.text();
-          throw new HttpError(
-            aiRes.status,
-            `大模型 API 返回异常: ${errText.slice(0, 120)}`,
-          );
+          throw new HttpError(aiRes.status, `大模型 API 返回异常: ${errText.slice(0, 120)}`);
         }
 
         const data = await aiRes.json();
-        const responseText =
-          data.choices?.[0]?.message?.content || "未收到有效 AI 回复";
+        const responseText = data.choices?.[0]?.message?.content || "未收到有效 AI 回复";
 
         if (enableCache) {
           try {
@@ -2326,11 +2200,7 @@ async function handleRequest(req: Request): Promise<Response> {
       ["sign"],
     );
 
-    const signatureBuffer = await crypto.subtle.sign(
-      "HMAC",
-      key,
-      new TextEncoder().encode(text),
-    );
+    const signatureBuffer = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(text));
 
     const signature = Array.from(new Uint8Array(signatureBuffer))
       .map((b) => b.toString(16).padStart(2, "0"))
@@ -2424,23 +2294,18 @@ async function handleRequest(req: Request): Promise<Response> {
 
     checkRateLimit(req, "stream", 20, 60_000);
 
-    return new Response(
-      createSseStream(DEMO_TEXT, req.signal),
-      {
-        headers: {
-          "content-type": "text/event-stream; charset=utf-8",
-          "cache-control": "no-cache, no-transform",
-          "x-accel-buffering": "no",
-        },
+    return new Response(createSseStream(DEMO_TEXT, req.signal), {
+      headers: {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache, no-transform",
+        "x-accel-buffering": "no",
       },
-    );
+    });
   }
 
   if (pathname === "/api/guestbook" && req.method === "GET") {
     const rawLimit = Number(url.searchParams.get("limit") ?? "20");
-    const limit = Number.isFinite(rawLimit)
-      ? Math.max(1, Math.min(Math.floor(rawLimit), 50))
-      : 20;
+    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(Math.floor(rawLimit), 50)) : 20;
 
     const entries = await listGuestbook(limit);
 
@@ -2494,10 +2359,7 @@ async function handleRequest(req: Request): Promise<Response> {
     const entry = await addGuestbookEntry(name, text);
 
     if (entry === null) {
-      return jsonResponse(
-        { error: "Deno KV 不可用，无法保存留言" },
-        { status: 503 },
-      );
+      return jsonResponse({ error: "Deno KV 不可用，无法保存留言" }, { status: 503 });
     }
 
     return jsonResponse(entry, { status: 201 });
@@ -2528,46 +2390,44 @@ async function handleRequest(req: Request): Promise<Response> {
 // 服务启动与统一错误处理
 // -----------------------------------------------------------------------------
 
-Deno.serve(
-  async (req: Request): Promise<Response> => {
-    try {
-      const response = await handleRequest(req);
-      return withSecurityHeaders(response);
-    } catch (error) {
-      if (error instanceof HttpError) {
-        return withSecurityHeaders(
-          jsonResponse(
-            { error: error.message },
-            {
-              status: error.status,
-              headers: error.headers,
-            },
-          ),
-        );
-      }
-
-      const requestId = crypto.randomUUID();
-
-      console.error("[Unhandled Error]", {
-        requestId,
-        method: req.method,
-        url: req.url,
-        error: getErrorMessage(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-
+Deno.serve(async (req: Request): Promise<Response> => {
+  try {
+    const response = await handleRequest(req);
+    return withSecurityHeaders(response);
+  } catch (error) {
+    if (error instanceof HttpError) {
       return withSecurityHeaders(
         jsonResponse(
+          { error: error.message },
           {
-            error: "服务器内部错误",
-            requestId,
+            status: error.status,
+            headers: error.headers,
           },
-          { status: 500 },
         ),
       );
     }
-  },
-);
+
+    const requestId = crypto.randomUUID();
+
+    console.error("[Unhandled Error]", {
+      requestId,
+      method: req.method,
+      url: req.url,
+      error: getErrorMessage(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    return withSecurityHeaders(
+      jsonResponse(
+        {
+          error: "服务器内部错误",
+          requestId,
+        },
+        { status: 500 },
+      ),
+    );
+  }
+});
 
 // ============================================================================
 // FILE-END

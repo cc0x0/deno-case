@@ -16,12 +16,15 @@ export default [
     },
     rules: {
       "no-unused-vars": "off",
-      "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
       "no-console": "off",
       "no-undef": "off",
       "prefer-const": "warn",
       "no-var": "error",
-      "eqeqeq": ["error", "always", { "null": "ignore" }]
+      eqeqeq: ["error", "always", { null: "ignore" }],
     },
   },
 ];

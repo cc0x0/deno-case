@@ -41,6 +41,7 @@
 ## 🛠️ 里程碑 1 详细功能设计 (当前迭代)
 
 ### 核心功能列表
+
 1. **API 网关代理 (`POST /api/ai/chat`)**：
    - 兼容 OpenAI / DeepSeek API 格式。
    - 环境变量读取 `AI_API_KEY` 与 `AI_BASE_URL`（支持官方及第三方中转）。
