@@ -9,7 +9,8 @@
     "dev": "deno run --watch --allow-net --allow-env --allow-read main.ts",
     "check": "tsc --noEmit",
     "lint": "eslint main.ts",
-    "lint:fix": "eslint main.ts --fix"
+    "lint:fix": "eslint main.ts --fix",
+    "deploy": "deno run -A jsr:@deno/deployctl deploy main.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",
