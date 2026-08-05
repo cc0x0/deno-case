@@ -1641,7 +1641,7 @@ const PAGE_HTML = `<!DOCTYPE html>
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ text: text })
       }).then(function (res) {
-        setText("hmac-out", "算法: " + res.algorithm + "\n签名: " + res.signature);
+        setText("hmac-out", "算法: " + res.algorithm + "\\n签名: " + res.signature);
       }).catch(function (err) {
         setText("hmac-out", "失败: " + err.message);
       });
@@ -1658,7 +1658,7 @@ const PAGE_HTML = `<!DOCTYPE html>
         headers: { "content-type": "text/plain; charset=utf-8" },
         body: text
       }).then(function (res) {
-        setText("hash-out", "算法: " + res.algorithm + " (" + res.bytes + " 字节)\nSHA-256: " + res.sha256);
+        setText("hash-out", "算法: " + res.algorithm + " (" + res.bytes + " 字节)\\nSHA-256: " + res.sha256);
       }).catch(function (err) {
         setText("hash-out", "失败: " + err.message);
       });
@@ -1682,7 +1682,7 @@ const PAGE_HTML = `<!DOCTYPE html>
     ttlBtn.addEventListener("click", function () {
       setText("ttl-out", "写入中...");
       requestJson("/api/kv-cache", { method: "POST" }).then(function (res) {
-        setText("ttl-out", "状态: " + res.status + "\nKey: " + JSON.stringify(res.key) + "\nTTL: " + res.ttlSeconds + " 秒后物理消除");
+        setText("ttl-out", "状态: " + res.status + "\\nKey: " + JSON.stringify(res.key) + "\\nTTL: " + res.ttlSeconds + " 秒后物理消除");
       }).catch(function (err) {
         setText("ttl-out", "写入失败: " + err.message);
       });
