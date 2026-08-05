@@ -1992,7 +1992,7 @@ const PAGE_HTML = `<!DOCTYPE html>
 
       var bubbleDiv = document.createElement("div");
       bubbleDiv.className = "msg-bubble";
-      bubbleDiv.innerHTML = text.replace(/\n/g, "<br/>") + (badgeHtml || "");
+      bubbleDiv.innerHTML = text.replace(/\\n/g, "<br/>") + (badgeHtml || "");
       div.appendChild(bubbleDiv);
 
       aiChatlog.appendChild(div);
