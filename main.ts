@@ -1299,7 +1299,7 @@ const PAGE_HTML = `<!DOCTYPE html>
       </div>
     </div>
 
-    <div class="menu-label">功能导航</div>
+    <div class="menu-label">⚡ 边缘基础设施</div>
     <ul class="nav-menu">
       <li class="nav-item active" data-tab="overview">
         <span class="nav-icon">⚡</span> 运行时概览
@@ -1318,6 +1318,13 @@ const PAGE_HTML = `<!DOCTYPE html>
       </li>
       <li class="nav-item" data-tab="cron">
         <span class="nav-icon">⏱️</span> Deno Cron 定时任务
+      </li>
+    </ul>
+
+    <div class="menu-label" style="margin-top:16px;">🤖 AI 演进微应用</div>
+    <ul class="nav-menu">
+      <li class="nav-item" data-tab="ai-gateway">
+        <span class="nav-icon">🤖</span> AI 边缘 API 网关
       </li>
     </ul>
 
@@ -1485,6 +1492,70 @@ const PAGE_HTML = `<!DOCTYPE html>
             <div class="stat-val" id="cron-tick" style="font-size:15px; color:var(--accent);">读取中…</div>
             <div class="stat-lbl">最新 Cron 心跳时间 (last_cron_tick)</div>
           </div>
+        </div>
+    <!-- [Tab 7] AI 边缘 API 网关 (Phase 1) -->
+    <section class="tab-panel" id="tab-ai-gateway">
+      <div class="panel-header">
+        <h1 class="panel-title">🤖 AI 边缘 API 网关 & Deno KV Token 缓存站</h1>
+        <p class="panel-desc">智能代理大模型 API，基于 Deno KV 自动对常见提问进行缓存。命中缓存即 0ms 返回且零 Token 消耗。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>⚙️ 网关运行配置</span>
+          <span id="ai-key-status" style="font-size:12px; padding:4px 10px; border-radius:999px;">检测中...</span>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <div class="card-desc">AI 模型选择 (Model)</div>
+            <select id="ai-model-select" style="width:100%; padding:9px 12px; border-radius:8px; background:rgba(0,0,0,0.3); color:var(--text); border:1px solid var(--border);">
+              <option value="deepseek-chat">deepseek-chat (DeepSeek V3)</option>
+              <option value="gpt-4o-mini">gpt-4o-mini (OpenAI)</option>
+              <option value="siliconflow/deepseek-v3">SiliconFlow DeepSeek</option>
+            </select>
+          </div>
+
+          <div>
+            <div class="card-desc">Deno KV 智能 Token 缓存</div>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; margin-top:8px;">
+              <input type="checkbox" id="ai-cache-toggle" checked style="width:16px; height:16px; accent-color:var(--accent);" />
+              开启 KV 响应缓存 (热门提问 0ms 零 Token 返回)
+            </label>
+          </div>
+        </div>
+
+        <div style="margin-top:14px;">
+          <div class="card-desc">System Prompt (人设指示词)</div>
+          <input id="ai-system-prompt" value="你是一个精通 Deno、TypeScript 与边缘计算的高级 Web 技术专家助手，回答简明扼要。" placeholder="输入系统人设 Prompt..." />
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+        <span class="card-desc" style="margin:0 4px 0 0;">快捷测试词:</span>
+        <button class="ai-chip-btn" type="button" data-prompt="用一句话总结 Deno 比 Node.js 强在哪些方面？" style="font-size:12px; padding:5px 12px; background:rgba(255,255,255,0.06); color:var(--text); border:1px solid var(--border);">⚡ Deno 核心优势</button>
+        <button class="ai-chip-btn" type="button" data-prompt="解释什么是 Web Crypto HMAC 签名及其应用场景" style="font-size:12px; padding:5px 12px; background:rgba(255,255,255,0.06); color:var(--text); border:1px solid var(--border);">🔐 HMAC 验签原理解释</button>
+        <button class="ai-chip-btn" type="button" data-prompt="写一首赞美边缘计算（Edge Computing）的四句小诗" style="font-size:12px; padding:5px 12px; background:rgba(255,255,255,0.06); color:var(--text); border:1px solid var(--border);">📜 边缘计算诗歌</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>💬 边缘 AI 代理交互</span>
+          <span style="font-size:12px; font-weight:400; color:var(--muted);">累计已节省 Token: <b id="ai-token-count" style="color:var(--accent);">0</b></span>
+        </div>
+
+        <div id="ai-chatlog" style="height:320px; overflow-y:auto; padding:16px; border-radius:12px; background:rgba(0,0,0,0.35); border:1px solid var(--border); display:flex; flex-direction:column; gap:12px; margin-bottom:14px;">
+          <div class="msg-row other-row">
+            <div class="msg-author">🤖 Deno AI Edge Gateway</div>
+            <div class="msg-bubble">
+              你好！我是部署在 Deno 边缘节点上的 AI 网关助手。支持全自动大模型代理以及 Deno KV 智能 Token 缓存！试着向我提问吧！
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <input id="ai-input" placeholder="向边缘 AI 提问 (按回车或点击发送)..." autocomplete="off" />
+          <button id="ai-send-btn" type="button">▶ 发送 AI 请求</button>
         </div>
       </div>
     </section>
@@ -1866,6 +1937,115 @@ const PAGE_HTML = `<!DOCTYPE html>
 
     connect();
   })();
+
+  // ---------------------------------------------------------------------------
+  // AI 边缘 API 网关 & KV 缓存 (Phase 1)
+  // ---------------------------------------------------------------------------
+  (function setupAiGateway() {
+    var aiInput = byId("ai-input");
+    var aiSendBtn = byId("ai-send-btn");
+    var aiChatlog = byId("ai-chatlog");
+    var aiModelSelect = byId("ai-model-select");
+    var aiSystemPrompt = byId("ai-system-prompt");
+    var aiCacheToggle = byId("ai-cache-toggle");
+    var aiKeyStatus = byId("ai-key-status");
+    var aiTokenCount = byId("ai-token-count");
+
+    var totalTokensSaved = 0;
+
+    requestJson("/api/info").then(function (info) {
+      if (aiKeyStatus) {
+        if (info.aiApiKeyConfigured) {
+          aiKeyStatus.textContent = "✅ 已配置 AI API 代理";
+          aiKeyStatus.style.background = "rgba(0,212,170,0.15)";
+          aiKeyStatus.style.color = "var(--accent)";
+        } else {
+          aiKeyStatus.textContent = "💡 演示模式 (未检测到 AI_API_KEY 变量)";
+          aiKeyStatus.style.background = "rgba(255,189,90,0.15)";
+          aiKeyStatus.style.color = "var(--warning)";
+        }
+      }
+    }).catch(function () {});
+
+    var chipBtns = document.querySelectorAll(".ai-chip-btn");
+    chipBtns.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var prompt = this.getAttribute("data-prompt");
+        if (aiInput && prompt) {
+          aiInput.value = prompt;
+          sendAiMessage();
+        }
+      });
+    });
+
+    function appendAiMsg(author, text, badgeHtml) {
+      if (!aiChatlog) return;
+      var isUser = author === "你";
+      var rowCls = isUser ? "me-row" : "other-row";
+      var div = document.createElement("div");
+      div.className = "msg-row " + rowCls;
+
+      var authorDiv = document.createElement("div");
+      authorDiv.className = "msg-author";
+      authorDiv.textContent = author;
+      div.appendChild(authorDiv);
+
+      var bubbleDiv = document.createElement("div");
+      bubbleDiv.className = "msg-bubble";
+      bubbleDiv.innerHTML = text.replace(/\n/g, "<br/>") + (badgeHtml || "");
+      div.appendChild(bubbleDiv);
+
+      aiChatlog.appendChild(div);
+      aiChatlog.scrollTop = aiChatlog.scrollHeight;
+    }
+
+    function sendAiMessage() {
+      if (!aiInput || !aiSendBtn) return;
+      var prompt = (aiInput.value || "").trim();
+      if (!prompt) return;
+
+      appendAiMsg("你", prompt, "");
+      aiInput.value = "";
+      aiSendBtn.disabled = true;
+
+      var model = aiModelSelect ? aiModelSelect.value : "deepseek-chat";
+      var systemPrompt = aiSystemPrompt ? aiSystemPrompt.value : "";
+      var enableCache = aiCacheToggle ? aiCacheToggle.checked : true;
+
+      requestJson("/api/ai/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          prompt: prompt,
+          systemPrompt: systemPrompt,
+          enableCache: enableCache,
+          model: model
+        })
+      }).then(function (res) {
+        var badgeHtml = "";
+        if (res.cached) {
+          badgeHtml = '<div style="margin-top:6px; font-size:11px; color:var(--accent); background:rgba(0,212,170,0.12); padding:2px 8px; border-radius:4px; display:inline-block;">⚡ Deno KV 0ms 缓存命中 (省 Token)</div>';
+          totalTokensSaved += res.savedTokens || 30;
+          if (aiTokenCount) aiTokenCount.textContent = String(totalTokensSaved);
+        } else {
+          badgeHtml = '<div style="margin-top:6px; font-size:11px; color:var(--muted); background:rgba(255,255,255,0.06); padding:2px 8px; border-radius:4px; display:inline-block;">🌐 边缘 API 代理响应 (' + res.model + ')</div>';
+        }
+
+        appendAiMsg("🤖 AI 边缘网关", res.text, badgeHtml);
+      }).catch(function (err) {
+        appendAiMsg("🤖 系统异常", "请求失败: " + err.message, "");
+      }).finally(function () {
+        aiSendBtn.disabled = false;
+      });
+    }
+
+    if (aiSendBtn) aiSendBtn.addEventListener("click", sendAiMessage);
+    if (aiInput) {
+      aiInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") sendAiMessage();
+      });
+    }
+  })();
 })();
 </script>
 </body>
@@ -1887,6 +2067,12 @@ async function getDiagnostics() {
     console.error("[Diagnostics Read Error]", err);
   }
 
+  const aiApiKeyConfigured = Boolean(
+    Deno.env.get("AI_API_KEY") ||
+    Deno.env.get("DEEPSEEK_API_KEY") ||
+    Deno.env.get("OPENAI_API_KEY"),
+  );
+
   return {
     appName: APP_NAME,
     bootTime: BOOT_TIME,
@@ -1899,6 +2085,7 @@ async function getDiagnostics() {
     kvConnected: kv !== null,
     kvError,
     lastCronTick,
+    aiApiKeyConfigured,
   };
 }
 
@@ -1960,6 +2147,147 @@ async function handleRequest(req: Request): Promise<Response> {
 
     const diag = await getDiagnostics();
     return jsonResponse(diag);
+  }
+
+  // AI 边缘 API 网关与 Deno KV 缓存 API (Phase 1)
+  if (pathname === "/api/ai/chat" && req.method === "POST") {
+    checkRateLimit(req, "ai-chat", 30, 60_000);
+
+    const body = (await readJsonBody(req, MAX_JSON_BYTES)) as {
+      prompt?: unknown;
+      systemPrompt?: unknown;
+      enableCache?: unknown;
+      model?: unknown;
+    };
+
+    const prompt = normalizeText(body.prompt, 1000);
+    if (!prompt) {
+      throw new HttpError(400, "Prompt 提问不能为空");
+    }
+
+    const systemPrompt = normalizeText(
+      body.systemPrompt || "你是一个精通 Deno、TypeScript 与边缘计算的高级 Web 技术专家助手，回答简明扼要。",
+      500,
+    );
+
+    const enableCache = body.enableCache !== false;
+    const model = normalizeText(body.model || "deepseek-chat", 50);
+
+    // 计算 SHA-256 哈希用于 Deno KV 缓存
+    const cacheKeyRaw = `${systemPrompt}::${prompt.toLowerCase()}`;
+    const hashBuffer = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(cacheKeyRaw),
+    );
+    const hashHex = Array.from(new Uint8Array(hashBuffer))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    // 尝试读取 Deno KV 缓存
+    if (enableCache) {
+      try {
+        const cacheKv = kv ?? (await Deno.openKv());
+        const cached = await cacheKv.get<string>(["ai_cache_v1", hashHex]);
+        if (cached && cached.value) {
+          return jsonResponse({
+            cached: true,
+            hash: hashHex,
+            text: cached.value,
+            model,
+            savedTokens: Math.max(20, Math.ceil(utf8Length(cached.value) / 3)),
+          });
+        }
+      } catch {
+        // 忽略缓存读取异常
+      }
+    }
+
+    const apiKey =
+      Deno.env.get("AI_API_KEY") ||
+      Deno.env.get("DEEPSEEK_API_KEY") ||
+      Deno.env.get("OPENAI_API_KEY");
+
+    if (apiKey) {
+      const baseUrl = Deno.env.get("AI_BASE_URL") ?? "https://api.deepseek.com";
+      const targetUrl = baseUrl.endsWith("/v1")
+        ? `${baseUrl}/chat/completions`
+        : `${baseUrl}/v1/chat/completions`;
+
+      try {
+        const aiRes = await fetch(targetUrl, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: prompt },
+            ],
+            stream: false,
+          }),
+        });
+
+        if (!aiRes.ok) {
+          const errText = await aiRes.text();
+          throw new HttpError(
+            aiRes.status,
+            `大模型 API 返回异常: ${errText.slice(0, 120)}`,
+          );
+        }
+
+        const data = await aiRes.json();
+        const responseText =
+          data.choices?.[0]?.message?.content || "未收到有效 AI 回复";
+
+        if (enableCache) {
+          try {
+            const cacheKv = kv ?? (await Deno.openKv());
+            await cacheKv.set(["ai_cache_v1", hashHex], responseText);
+          } catch {
+            // ignore
+          }
+        }
+
+        return jsonResponse({
+          cached: false,
+          hash: hashHex,
+          text: responseText,
+          model,
+          savedTokens: 0,
+        });
+      } catch (err) {
+        if (err instanceof HttpError) throw err;
+        throw new HttpError(502, `AI 上游网络连接失败: ${getErrorMessage(err)}`);
+      }
+    }
+
+    // 演示模式 (未配置 API KEY 时提供丰富 Mock AI 响应)
+    const demoReply =
+      `【Deno 边缘 AI 网关 Demo 模拟回复】\n\n` +
+      `收到您的提问：「${prompt}」\n\n` +
+      `⚡ 边缘特性：本服务完全运行在 Deno Deploy 全球边缘节点上！\n` +
+      `💡 环境变量：未检测到 AI_API_KEY，当前以 Demo 模式运行。在 Deno Deploy 设置 AI_API_KEY 即可自动连接真实 DeepSeek / OpenAI 模型！\n\n` +
+      `当你开启缓存再次提问相同问题时，将自动触发 Deno KV 0ms 零 Token 缓存命中！`;
+
+    if (enableCache) {
+      try {
+        const cacheKv = kv ?? (await Deno.openKv());
+        await cacheKv.set(["ai_cache_v1", hashHex], demoReply);
+      } catch {
+        // ignore
+      }
+    }
+
+    return jsonResponse({
+      cached: false,
+      hash: hashHex,
+      text: demoReply,
+      model: `${model} (Demo)`,
+      savedTokens: 0,
+    });
   }
 
   // 手动触发模拟 Cron 心跳 API

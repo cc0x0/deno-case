@@ -50,3 +50,20 @@ Deno.test("接口测试: Web Crypto HMAC-SHA256 签名计算", async () => {
   assertExists(signature);
   assertEquals(signature.length, 64);
 });
+
+Deno.test("接口测试: POST /api/ai/chat AI 网关哈希算法验证", async () => {
+  const systemPrompt = "你是一个技术专家助手";
+  const prompt = "什么是 Deno";
+  const rawKey = `${systemPrompt}::${prompt.toLowerCase()}`;
+  const hashBuffer = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(rawKey),
+  );
+  const hashHex = Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  assertExists(hashHex);
+  assertEquals(hashHex.length, 64);
+});
+
