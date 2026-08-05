@@ -1,0 +1,21 @@
+{
+  "name": "deno-case",
+  "version": "1.0.0",
+  "description": "Deno Deploy 边缘原生能力全景控制台",
+  "main": "main.ts",
+  "type": "module",
+  "scripts": {
+    "start": "deno run --allow-net --allow-env --allow-read main.ts",
+    "dev": "deno run --watch --allow-net --allow-env --allow-read main.ts",
+    "check": "tsc --noEmit",
+    "lint": "eslint main.ts",
+    "lint:fix": "eslint main.ts --fix"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@typescript-eslint/eslint-plugin": "^8.23.0",
+    "@typescript-eslint/parser": "^8.23.0",
+    "eslint": "^9.19.0",
+    "typescript": "^5.7.3"
+  }
+}

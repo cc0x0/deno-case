@@ -1,0 +1,23 @@
+{
+  "tasks": {
+    "start": "deno run --allow-net --allow-env --allow-read main.ts",
+    "dev": "deno run --watch --allow-net --allow-env --allow-read main.ts",
+    "check": "deno check main.ts",
+    "lint": "deno lint main.ts",
+    "fmt": "deno fmt main.ts"
+  },
+  "compilerOptions": {
+    "lib": ["deno.window", "deno.ns", "dom"]
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "singleQuote": false
+  }
+}

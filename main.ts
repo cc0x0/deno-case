@@ -2,7 +2,7 @@
 // deno-showcase / main.ts
 // 单文件 · 零第三方依赖 · 零构建
 //
-// 展示：Deno.serve / Deno KV (KV Watch 跨节点广播) / WebSocket / SSE / Web Crypto
+// 展示：Deno.serve / Deno KV (KV Watch 跨节点广播 + TTL 缓存) / WebSocket / SSE / Web Crypto HMAC / Deno Cron
 //
 // FILE-BEGIN
 // ============================================================================
@@ -24,7 +24,7 @@ const MAX_GUESTBOOK_TEXT_LENGTH = 200;
 const MAX_CHAT_TEXT_LENGTH = 300;
 
 const DEMO_TEXT =
-  "你好！我是通过 Deno.serve 和 ReadableStream 实现的流式输出 ——" +
+  "你好！我是通过 Deno.serve 和 ReadableStream 实现的流式输出 —— " +
   "这正是聊天类应用中「打字机效果」的底层原理。" +
   "无需任何框架，Web 标准 API 直接在边缘运行。🦕⚡";
 
@@ -244,6 +244,23 @@ async function initializeKv(): Promise<void> {
     kvError = getErrorMessage(error);
     console.error("[KV] 数据库初始化失败:", kvError);
   }
+}
+
+// -----------------------------------------------------------------------------
+// Deno Cron：边缘定时任务 (每分钟更新一次系统运行心跳到 KV)
+// -----------------------------------------------------------------------------
+
+if ("cron" in Deno && typeof Deno.cron === "function") {
+  Deno.cron("cron-heartbeat", "* * * * *", async () => {
+    if (kv) {
+      try {
+        await kv.set(["stats", "last_cron_tick"], new Date().toISOString());
+        console.log("[Cron] 心跳刷新成功");
+      } catch (err) {
+        console.error("[Cron] 心跳刷新失败:", getErrorMessage(err));
+      }
+    }
+  });
 }
 
 // -----------------------------------------------------------------------------
@@ -732,7 +749,7 @@ function handleWebSocket(req: Request): Response {
 }
 
 // -----------------------------------------------------------------------------
-// 单文件页面 HTML & 现代 Chat UI
+// 单文件页面 HTML & 现代 Side Menu Dashboard UI
 // -----------------------------------------------------------------------------
 
 const PAGE_HTML = `<!DOCTYPE html>
@@ -741,46 +758,42 @@ const PAGE_HTML = `<!DOCTYPE html>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="dark" />
-<title>🦕 Deno Deploy 能力全景秀</title>
+<title>🦕 Deno Deploy 边缘能力全景控制台</title>
 
 <style>
   :root {
-    --bg: #0a0e14;
-    --panel: rgba(255, 255, 255, 0.05);
-    --border: rgba(255, 255, 255, 0.1);
+    --bg: #0b0f19;
+    --sidebar-bg: #121826;
+    --panel: rgba(255, 255, 255, 0.04);
+    --panel-hover: rgba(255, 255, 255, 0.07);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-accent: rgba(0, 212, 170, 0.3);
     --accent: #00d4aa;
+    --accent-glow: rgba(0, 212, 170, 0.25);
     --accent2: #7c5cff;
-    --text: #e8ecf1;
-    --muted: #8b95a5;
+    --text: #eef2f7;
+    --muted: #8e9bb0;
     --warning: #ffbd5a;
-    --error: #ff6b7a;
+    --error: #ff5252;
+    --sidebar-width: 260px;
   }
 
   * {
     box-sizing: border-box;
   }
 
-  html,
-  body {
+  html, body {
     margin: 0;
     padding: 0;
+    width: 100%;
+    height: 100%;
     overflow-x: hidden;
     background: var(--bg);
     color: var(--text);
-    font-family:
-      "SF Pro Display",
-      -apple-system,
-      BlinkMacSystemFont,
-      "Segoe UI",
-      Roboto,
-      "PingFang SC",
-      "Microsoft YaHei",
-      sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
   }
 
-  button,
-  input,
-  textarea {
+  button, input, textarea {
     font: inherit;
   }
 
@@ -791,187 +804,285 @@ const PAGE_HTML = `<!DOCTYPE html>
     pointer-events: none;
   }
 
-  .wrap {
+  /* 整体 Layout：侧边栏 + 主内容区 */
+  .app-container {
     position: relative;
     z-index: 1;
-    width: 100%;
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 48px 20px 100px;
+    display: flex;
+    min-height: 100vh;
   }
 
-  header {
-    margin-bottom: 56px;
+  /* Sidebar 侧边栏导航 */
+  .sidebar {
+    width: var(--sidebar-width);
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 24px 16px;
+    flex-shrink: 0;
+    backdrop-filter: blur(16px);
+    transition: transform 0.3s ease;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 8px 24px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+
+  .brand-logo {
+    font-size: 28px;
+    line-height: 1;
+    filter: drop-shadow(0 0 8px var(--accent-glow));
+  }
+
+  .brand-title {
+    font-size: 16px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-color: transparent;
+    color: transparent;
+    letter-spacing: -0.01em;
+  }
+
+  .brand-sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .menu-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0 8px 8px;
+  }
+
+  .nav-menu {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13.5px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    user-select: none;
+  }
+
+  .nav-item:hover {
+    background: var(--panel-hover);
+    color: var(--text);
+  }
+
+  .nav-item.active {
+    background: rgba(0, 212, 170, 0.1);
+    color: var(--accent);
+    border-color: var(--border-accent);
+    box-shadow: 0 2px 12px var(--accent-glow);
+  }
+
+  .nav-icon {
+    font-size: 16px;
+    width: 20px;
     text-align: center;
   }
 
-  header h1 {
-    margin: 0 0 12px;
-    background:
-      linear-gradient(
-        120deg,
-        var(--accent),
-        var(--accent2)
-      );
-    background-clip: text;
-    -webkit-background-clip: text;
-    color: transparent;
-    font-size: clamp(28px, 5vw, 44px);
-    font-weight: 800;
-    letter-spacing: -0.02em;
-  }
-
-  header p {
-    margin: 0;
+  .sidebar-footer {
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
     color: var(--muted);
-    font-size: 16px;
-    line-height: 1.7;
+    text-align: center;
+    line-height: 1.6;
   }
 
-  .badges {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 8px;
-    margin-top: 20px;
+  /* Main Display Area 主展示区 */
+  .main-content {
+    flex: 1;
+    padding: 32px 40px 60px;
+    max-width: 1100px;
+    overflow-y: auto;
   }
 
-  .badge {
-    padding: 5px 12px;
+  .mobile-header {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: var(--sidebar-bg);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .menu-toggle {
+    background: none;
     border: 1px solid var(--border);
-    border-radius: 999px;
-    background: var(--panel);
-    color: var(--muted);
-    font-family:
-      "SF Mono",
-      Menlo,
-      Consolas,
-      monospace;
-    font-size: 12px;
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
   }
 
-  .grid {
+  /* 面板 Tab Switch */
+  .tab-panel {
+    display: none;
+    animation: fadeIn 0.25s ease-in-out;
+  }
+
+  .tab-panel.active {
+    display: block;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .panel-header {
+    margin-bottom: 28px;
+  }
+
+  .panel-title {
+    font-size: 26px;
+    font-weight: 700;
+    margin: 0 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .panel-desc {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 0;
+    line-height: 1.6;
+  }
+
+  /* Cards & Grid Layout */
+  .grid-2 {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 20px;
   }
 
   .card {
-    position: relative;
-    overflow: hidden;
     padding: 24px;
     border: 1px solid var(--border);
     border-radius: 16px;
     background: var(--panel);
     backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    transition:
-      transform 0.25s ease,
-      border-color 0.25s ease;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+    margin-bottom: 20px;
   }
 
   .card:hover {
-    transform: translateY(-3px);
-    border-color: rgba(0, 212, 170, 0.4);
+    border-color: rgba(0, 212, 170, 0.3);
   }
 
-  .card h2 {
+  .card-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 12px;
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
+    justify-content: space-between;
     gap: 8px;
-    margin: 0 0 6px;
-    font-size: 17px;
   }
 
-  .card .desc {
-    margin-bottom: 16px;
+  .card-desc {
+    font-size: 12.5px;
     color: var(--muted);
-    font-size: 13px;
-    line-height: 1.65;
+    margin-bottom: 16px;
+    line-height: 1.6;
   }
 
-  .full {
-    grid-column: 1 / -1;
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
   }
 
-  .stats-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 28px;
+  .stat-card {
+    padding: 16px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
   }
 
-  .stat-block {
-    min-width: 100px;
-  }
-
-  .stat {
+  .stat-val {
+    font-size: 24px;
+    font-weight: 700;
     color: var(--accent);
-    font-family:
-      "SF Mono",
-      Menlo,
-      Consolas,
-      monospace;
-    font-size: 34px;
-    font-weight: 800;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
     overflow-wrap: anywhere;
   }
 
-  .stat.small {
-    font-size: 16px;
-  }
-
-  .stat-label {
-    margin-top: 4px;
-    color: var(--muted);
+  .stat-lbl {
     font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
   }
 
+  /* Controls & Inputs */
   .row {
     display: flex;
-    gap: 8px;
+    gap: 10px;
   }
 
-  input,
-  textarea,
-  button {
-    padding: 9px 12px;
+  input, textarea, button {
+    padding: 10px 14px;
     border: 1px solid var(--border);
     border-radius: 8px;
     outline: none;
   }
 
-  input,
-  textarea {
-    min-width: 0;
+  input, textarea {
     flex: 1;
-    background: rgba(255, 255, 255, 0.06);
+    min-width: 0;
+    background: rgba(0, 0, 0, 0.25);
     color: var(--text);
+    transition: border-color 0.2s ease;
   }
 
-  input:focus,
-  textarea:focus {
+  input:focus, textarea:focus {
     border-color: var(--accent);
   }
 
   button {
     border: none;
     cursor: pointer;
-    background:
-      linear-gradient(
-        120deg,
-        var(--accent),
-        var(--accent2)
-      );
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
     color: #04140f;
     font-weight: 700;
-    transition:
-      opacity 0.2s ease,
-      transform 0.2s ease;
+    transition: opacity 0.2s ease, transform 0.1s ease;
+    white-space: nowrap;
   }
 
   button:hover:not(:disabled) {
-    opacity: 0.86;
+    opacity: 0.88;
   }
 
   button:active:not(:disabled) {
@@ -983,27 +1094,114 @@ const PAGE_HTML = `<!DOCTYPE html>
     opacity: 0.4;
   }
 
-  .notice {
-    padding: 10px 12px;
-    border: 1px solid rgba(255, 189, 90, 0.25);
+  .code-out {
+    margin-top: 12px;
+    padding: 12px 14px;
     border-radius: 8px;
-    background: rgba(255, 189, 90, 0.07);
-    color: var(--warning);
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--accent);
+    font-family: "SF Mono", Menlo, Consolas, monospace;
     font-size: 12px;
-    line-height: 1.65;
+    line-height: 1.6;
     overflow-wrap: anywhere;
   }
 
-  .hidden {
-    display: none !important;
+  .notice {
+    padding: 12px 14px;
+    border: 1px solid rgba(255, 189, 90, 0.3);
+    border-radius: 8px;
+    background: rgba(255, 189, 90, 0.08);
+    color: var(--warning);
+    font-size: 12px;
+    line-height: 1.6;
   }
 
+  /* Chat Log Styling */
+  #chatlog {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: 320px;
+    overflow-y: auto;
+    margin-bottom: 14px;
+    padding: 16px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--border);
+  }
+
+  .msg-row {
+    display: flex;
+    flex-direction: column;
+    max-width: 80%;
+  }
+
+  .msg-row.sys-row {
+    align-self: center;
+    max-width: 90%;
+  }
+
+  .sys-badge {
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--muted);
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .msg-row.other-row {
+    align-self: flex-start;
+  }
+
+  .msg-row.me-row {
+    align-self: flex-end;
+  }
+
+  .msg-author {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 4px;
+    padding-left: 4px;
+  }
+
+  .msg-bubble {
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 13.5px;
+    line-height: 1.5;
+    word-break: break-word;
+  }
+
+  .other-row .msg-bubble {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    border-top-left-radius: 4px;
+  }
+
+  .me-row .msg-bubble {
+    background: linear-gradient(135deg, var(--accent), #00a887);
+    color: #04140f;
+    font-weight: 500;
+    border-top-right-radius: 4px;
+  }
+
+  .msg-time {
+    font-size: 10px;
+    opacity: 0.65;
+    float: right;
+    margin-left: 8px;
+    margin-top: 4px;
+  }
+
+  /* Status Indicator */
   .status {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    color: var(--muted);
     font-size: 12px;
+    color: var(--muted);
     font-weight: 400;
   }
 
@@ -1016,112 +1214,24 @@ const PAGE_HTML = `<!DOCTYPE html>
 
   .status.connected .status-dot {
     background: var(--accent);
-    box-shadow: 0 0 8px rgba(0, 212, 170, 0.8);
+    box-shadow: 0 0 8px var(--accent);
   }
 
   .status.disconnected .status-dot {
     background: var(--error);
   }
 
-  /* -------------------------------------------------------------------------
-   * 现代 Chat UI 样式 (Bubble & Flex 布局)
-   * ------------------------------------------------------------------------- */
-  #chatlog {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    height: 280px;
-    overflow-y: auto;
-    margin-bottom: 12px;
-    padding: 16px;
-    border-radius: 12px;
-    background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-  }
-
-  .msg-row {
-    display: flex;
-    flex-direction: column;
-    max-width: 80%;
-  }
-
-  /* 1. 系统消息：居中展示 */
-  .msg-row.sys-row {
-    align-self: center;
-    max-width: 90%;
-    margin: 4px 0;
-  }
-
-  .sys-badge {
-    padding: 4px 12px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    color: var(--muted);
-    font-size: 11px;
-    text-align: center;
-  }
-
-  /* 2. 别人的消息：左对齐 */
-  .msg-row.other-row {
-    align-self: flex-start;
-  }
-
-  .msg-author {
-    font-size: 11px;
-    color: var(--muted);
-    margin-bottom: 4px;
-    padding-left: 4px;
-  }
-
-  .other-row .msg-bubble {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: var(--text);
-    border-top-left-radius: 4px;
-  }
-
-  /* 3. 自己的消息：右对齐 */
-  .msg-row.me-row {
-    align-self: flex-end;
-  }
-
-  .me-row .msg-bubble {
-    background: linear-gradient(135deg, var(--accent), #00a887);
-    color: #04140f;
-    font-weight: 500;
-    border-top-right-radius: 4px;
-    box-shadow: 0 2px 10px rgba(0, 212, 170, 0.2);
-  }
-
-  /* 消息气泡通用结构 */
-  .msg-bubble {
-    position: relative;
-    padding: 10px 14px;
-    border-radius: 14px;
-    font-size: 13.5px;
-    line-height: 1.5;
-    word-break: break-word;
-  }
-
-  .msg-time {
-    display: inline-block;
-    font-size: 10px;
-    margin-left: 8px;
-    opacity: 0.65;
-    float: right;
-    margin-top: 4px;
-  }
-
+  /* SSE Stream */
   #stream-out {
-    min-height: 60px;
-    margin-top: 10px;
-    padding: 14px;
+    min-height: 80px;
+    margin-top: 14px;
+    padding: 16px;
     border-radius: 10px;
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(0, 0, 0, 0.35);
     font-size: 14px;
     line-height: 1.7;
     overflow-wrap: anywhere;
+    border: 1px solid var(--border);
   }
 
   #stream-out .cursor {
@@ -1134,99 +1244,37 @@ const PAGE_HTML = `<!DOCTYPE html>
     animation: blink 1s step-end infinite;
   }
 
-  @keyframes blink {
-    50% {
-      opacity: 0;
-    }
-  }
+  @keyframes blink { 50% { opacity: 0; } }
 
-  #guestbook-list {
-    max-height: 260px;
-    overflow-y: auto;
-    margin-top: 14px;
-  }
-
-  .gb-entry {
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 13px;
-    line-height: 1.55;
-    overflow-wrap: anywhere;
-  }
-
-  .gb-entry b {
-    color: var(--accent);
-  }
-
-  .gb-time {
-    margin-top: 3px;
-    color: var(--muted);
-    font-size: 11px;
-  }
-
-  #hash-out {
-    min-height: 36px;
-    margin-top: 10px;
-    padding: 10px;
-    border-radius: 8px;
-    background: rgba(0, 0, 0, 0.3);
-    color: var(--accent);
-    font-family:
-      "SF Mono",
-      Menlo,
-      Consolas,
-      monospace;
-    font-size: 12px;
-    line-height: 1.5;
-    overflow-wrap: anywhere;
-  }
-
-  footer {
-    margin-top: 60px;
-    color: var(--muted);
-    text-align: center;
-    font-size: 12px;
-    line-height: 1.8;
-  }
-
-  footer a {
-    color: var(--accent);
-    text-decoration: none;
-  }
-
-  footer a:hover {
-    text-decoration: underline;
-  }
-
-  @media (max-width: 760px) {
-    .grid {
-      grid-template-columns: 1fr;
-    }
-
-    .row.mobile-stack {
+  /* Responsive Adjustments */
+  @media (max-width: 768px) {
+    .app-container {
       flex-direction: column;
     }
 
-    #gb-name {
-      max-width: none !important;
+    .mobile-header {
+      display: flex;
     }
 
-    .msg-row {
-      max-width: 90%;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    canvas#bg {
-      display: none;
+    .sidebar {
+      position: fixed;
+      inset: 0 right 0 0;
+      z-index: 99;
+      width: 260px;
+      transform: translateX(-100%);
     }
 
-    .card {
-      transition: none;
+    .sidebar.open {
+      transform: translateX(0);
+      box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
     }
 
-    #stream-out .cursor {
-      animation: none;
+    .main-content {
+      padding: 20px 16px 40px;
+    }
+
+    .grid-2 {
+      grid-template-columns: 1fr;
     }
   }
 </style>
@@ -1235,286 +1283,282 @@ const PAGE_HTML = `<!DOCTYPE html>
 <body>
 <canvas id="bg"></canvas>
 
-<div class="wrap">
-  <header>
-    <h1>🦕 Deno Deploy 能力全景秀</h1>
-    <p>
-      一个 main.ts，零构建，全部运行在边缘——这个页面本身就是证据
-    </p>
-    <div class="badges" id="badges"></div>
-  </header>
+<div class="mobile-header">
+  <div style="font-weight:700; color:var(--accent);">🦕 Deno Deploy 控制台</div>
+  <button class="menu-toggle" id="menu-toggle">☰ 菜单</button>
+</div>
 
-  <main class="grid">
-    <section class="card full">
-      <h2>⚡ 实时运行时信息</h2>
+<div class="app-container">
+  <!-- 侧边栏 Side Menu -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-logo">🦕</div>
+      <div>
+        <div class="brand-title">Deno Deploy</div>
+        <div class="brand-sub">边缘原生能力全景秀</div>
+      </div>
+    </div>
 
-      <div class="desc">
-        直接从 Deno.version 和 Deno.env 读取，服务端每次请求实时计算
+    <div class="menu-label">功能导航</div>
+    <ul class="nav-menu">
+      <li class="nav-item active" data-tab="overview">
+        <span class="nav-icon">⚡</span> 运行时概览
+      </li>
+      <li class="nav-item" data-tab="crypto">
+        <span class="nav-icon">🔐</span> Web Crypto API
+      </li>
+      <li class="nav-item" data-tab="websocket">
+        <span class="nav-icon">💬</span> 实时 WebSocket
+      </li>
+      <li class="nav-item" data-tab="sse">
+        <span class="nav-icon">🌊</span> SSE 流式输出
+      </li>
+      <li class="nav-item" data-tab="kv">
+        <span class="nav-icon">📈</span> Deno KV 数据
+      </li>
+      <li class="nav-item" data-tab="cron">
+        <span class="nav-icon">⏱️</span> Deno Cron 定时任务
+      </li>
+    </ul>
+
+    <div class="sidebar-footer">
+      Deno.serve 驱动 · 单文件 · 零构建<br />
+      <a href="/api/info" target="_blank" style="color:var(--accent); text-decoration:none;">查看 API JSON</a>
+    </div>
+  </aside>
+
+  <!-- 主展示区域 Main Display Area -->
+  <main class="main-content">
+
+    <!-- [Tab 1] 运行时概览 -->
+    <section class="tab-panel active" id="tab-overview">
+      <div class="panel-header">
+        <h1 class="panel-title">⚡ 运行时与边缘环境概览</h1>
+        <p class="panel-desc">直接读取 Deno.version 与 Deno.env 环境变量，每次请求由边缘节点实时计算返回。</p>
       </div>
 
-      <div
-        class="stats-row"
-        id="runtime-stats"
-      ></div>
-
-      <div
-        id="kv-warning"
-        class="notice hidden"
-        style="margin-top:16px"
-      ></div>
-    </section>
-
-    <section class="card">
-      <h2>📈 Deno KV 原子计数器</h2>
-
-      <div class="desc">
-        每次打开页面调用 kv.atomic().sum() 持久化 +1
+      <div class="card">
+        <div class="card-title">边缘节点系统参数</div>
+        <div class="stats-grid" id="overview-stats">
+          <div class="stat-card"><div class="stat-val">Loading…</div><div class="stat-lbl">数据加载中</div></div>
+        </div>
       </div>
 
-      <div
-        class="stat"
-        id="visit-count"
-      >–</div>
-
-      <div
-        class="stat-label"
-        id="visit-label"
-      >
-        累计访问次数（跨实例持久化）
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>🔐 Web Crypto API</h2>
-
-      <div class="desc">
-        服务端调用 crypto.subtle.digest 计算 SHA-256
-      </div>
-
-      <div class="row">
-        <input
-          id="hash-input"
-          maxlength="4096"
-          placeholder="输入任意文本..."
-          value="Hello Deno"
-        />
-
-        <button
-          id="hash-btn"
-          type="button"
-        >
-          SHA-256
-        </button>
-      </div>
-
-      <div id="hash-out">等待输入…</div>
-    </section>
-
-    <section class="card full">
-      <h2>
-        💬 WebSocket 实时中转
-
-        <span
-          id="ws-status"
-          class="status"
-        >
-          <span class="status-dot"></span>
-          <span id="ws-status-text">连接中</span>
-        </span>
-      </h2>
-
-      <div class="desc">
-        浏览器 ⇄ Deno.serve WebSocket ⇄ Deno KV Watch 跨边缘中转。
-        打开两个网页即可实时通信。当前边缘节点连接：
-        <b id="online-count">0</b>
-      </div>
-
-      <div
-        id="chatlog"
-        aria-live="polite"
-      ></div>
-
-      <div class="row">
-        <input
-          id="chat-input"
-          maxlength="300"
-          placeholder="输入消息，回车发送..."
-          autocomplete="off"
-        />
-
-        <button
-          id="chat-send"
-          type="button"
-          disabled
-        >
-          发送
-        </button>
+      <div class="card">
+        <div class="card-title">快速链接与接口服务</div>
+        <div class="row" style="flex-wrap:wrap; gap:10px;">
+          <a href="/api/info" target="_blank" style="text-decoration:none;"><button type="button">📋 /api/info (运行时 JSON)</button></a>
+          <a href="/api/diagnostics" target="_blank" style="text-decoration:none;"><button type="button">🩺 /api/diagnostics (部署诊断)</button></a>
+          <a href="/health" target="_blank" style="text-decoration:none;"><button type="button">💚 /health (健康检查)</button></a>
+        </div>
       </div>
     </section>
 
-    <section class="card full">
-      <h2>🌊 SSE 流式响应</h2>
-
-      <div class="desc">
-        用 ReadableStream 逐字符 enqueue，模拟大模型 token-by-token 输出
+    <!-- [Tab 2] Web Crypto API -->
+    <section class="tab-panel" id="tab-crypto">
+      <div class="panel-header">
+        <h1 class="panel-title">🔐 Web Crypto API 验签与加密</h1>
+        <p class="panel-desc">使用零第三方依赖的原生 crypto.subtle 算法完成 HMAC-SHA256 安全签名与 SHA-256 哈希计算。</p>
       </div>
 
-      <button
-        id="stream-btn"
-        type="button"
-      >
-        ▶ 开始流式输出
-      </button>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">1. Web Crypto HMAC 签名验签</div>
+          <div class="card-desc">服务端使用 SECRET_KEY 秘钥进行 HMAC-SHA256 签名（常用于 API 防重放与防篡改）</div>
+          <div class="row">
+            <input id="hmac-input" placeholder="输入待签名的文本..." value="Hello Deno HMAC" />
+            <button id="hmac-btn" type="button">HMAC 签名</button>
+          </div>
+          <div class="code-out" id="hmac-out">点击按钮发起签名计算…</div>
+        </div>
 
-      <div id="stream-out">
-        点击按钮查看效果...
+        <div class="card">
+          <div class="card-title">2. SHA-256 摘要哈希计算</div>
+          <div class="card-desc">调用 crypto.subtle.digest 生成十六进制哈希摘要</div>
+          <div class="row">
+            <input id="hash-input" placeholder="输入任意文本..." value="Hello Deno" />
+            <button id="hash-btn" type="button">SHA-256</button>
+          </div>
+          <div class="code-out" id="hash-out">等待输入…</div>
+        </div>
       </div>
     </section>
 
-    <section class="card full">
-      <h2>📝 Deno KV 留言板</h2>
-
-      <div class="desc">
-        使用 kv.set() 写入、kv.list() 按时间倒序读取
+    <!-- [Tab 3] 实时 WebSocket & KV Watch -->
+    <section class="tab-panel" id="tab-websocket">
+      <div class="panel-header">
+        <h1 class="panel-title">
+          💬 WebSocket & KV Watch 实时气泡聊天室
+          <span id="ws-status" class="status">
+            <span class="status-dot"></span>
+            <span id="ws-status-text">连接中</span>
+          </span>
+        </h1>
+        <p class="panel-desc">结合 Deno.upgradeWebSocket 与 Deno KV Watch 实现多实例、跨边缘节点的双向即时中转。</p>
       </div>
 
-      <div class="row mobile-stack">
-        <input
-          id="gb-name"
-          maxlength="24"
-          placeholder="你的名字"
-          style="max-width:140px"
-        />
+      <div class="card">
+        <div class="card-title">
+          <span>边缘聊天室</span>
+          <span style="font-weight:400; font-size:12px; color:var(--muted);">当前节点连接数: <b id="online-count" style="color:var(--accent);">0</b></span>
+        </div>
 
-        <input
-          id="gb-text"
-          maxlength="200"
-          placeholder="留下点什么..."
-        />
+        <div id="chatlog" aria-live="polite"></div>
 
-        <button
-          id="gb-send"
-          type="button"
-        >
-          提交
-        </button>
+        <div class="row">
+          <input id="chat-input" maxlength="300" placeholder="输入消息，回车或点击发送..." autocomplete="off" />
+          <button id="chat-send" type="button" disabled>发送</button>
+        </div>
       </div>
-
-      <div id="guestbook-list"></div>
     </section>
+
+    <!-- [Tab 4] SSE 流式输出 -->
+    <section class="tab-panel" id="tab-sse">
+      <div class="panel-header">
+        <h1 class="panel-title">🌊 SSE (Server-Sent Events) 流式响应</h1>
+        <p class="panel-desc">通过 ReadableStream 逐字符 enqueue 输出，实现大模型 AI Token 打字机流式展现。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Token 打字机演示</div>
+        <button id="stream-btn" type="button">▶ 开始 SSE 流式输出</button>
+        <div id="stream-out">点击按钮查看流式响应效果...</div>
+      </div>
+    </section>
+
+    <!-- [Tab 5] Deno KV 数据中心 -->
+    <section class="tab-panel" id="tab-kv">
+      <div class="panel-header">
+        <h1 class="panel-title">📈 Deno KV 边缘数据中心</h1>
+        <p class="panel-desc">演示 Deno KV 的分布式原子计数、TTL 自动过期缓存与持久化留言板操作。</p>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">1. KV 原子计数器 (sum)</div>
+          <div class="card-desc">每次调用 kv.atomic().sum() 原子的完成 +1</div>
+          <div class="stat-val" id="visit-count" style="font-size:32px; margin-bottom:8px;">–</div>
+          <div class="stat-lbl" id="visit-label">累计访问次数（跨边缘节点持久化）</div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">2. KV TTL 自动过期缓存 (expireIn)</div>
+          <div class="card-desc">设置 60 秒自动物理消除的临时缓存键</div>
+          <button id="ttl-btn" type="button">写入 60s TTL 临时缓存</button>
+          <div class="code-out" id="ttl-out">点击生成带 TTL 的缓存条目</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">3. Deno KV 动态留言板</div>
+        <div class="card-desc">kv.set() 写入记录，kv.list() 倒序读取</div>
+        <div class="row" style="margin-bottom:14px;">
+          <input id="gb-name" maxlength="24" placeholder="你的昵称" style="max-width:140px" />
+          <input id="gb-text" maxlength="200" placeholder="写下你想对 Deno 说的话..." />
+          <button id="gb-send" type="button">提交留言</button>
+        </div>
+        <div id="guestbook-list" style="max-height:260px; overflow-y:auto;"></div>
+      </div>
+    </section>
+
+    <!-- [Tab 6] Deno Cron -->
+    <section class="tab-panel" id="tab-cron">
+      <div class="panel-header">
+        <h1 class="panel-title">⏱️ Deno Cron 边缘定时心跳</h1>
+        <p class="panel-desc">无需 node-cron 等第三方包，原生定义 Deno.cron("* * * * *", fn) 在边缘节点后台运行。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Cron 心跳运行状态</div>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-val" id="cron-spec" style="font-size:20px;">* * * * *</div>
+            <div class="stat-lbl">Cron 触发规则 (每分钟)</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="cron-tick" style="font-size:16px;">读取中…</div>
+            <div class="stat-lbl">最新 Cron 心跳时间 (last_cron_tick)</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
-
-  <footer>
-    由 <b>Deno.serve</b> 直接驱动，无框架、无构建步骤、无 node_modules
-    <br />
-
-    <a
-      href="/api/info"
-      target="_blank"
-      rel="noopener"
-    >
-      查看运行时 JSON
-    </a>
-
-    ·
-
-    <a
-      href="/api/diagnostics"
-      target="_blank"
-      rel="noopener"
-    >
-      查看部署诊断
-    </a>
-
-    ·
-
-    <a
-      href="/health"
-      target="_blank"
-      rel="noopener"
-    >
-      健康检查
-    </a>
-  </footer>
 </div>
 
 <script>
 (function () {
   "use strict";
 
-  function byId(id) {
-    return document.getElementById(id);
-  }
+  function byId(id) { return document.getElementById(id); }
 
   function setText(id, value) {
     var element = byId(id);
-
-    if (element) {
-      element.textContent = String(value);
-    }
+    if (element) { element.textContent = String(value); }
   }
 
   function requestJson(url, options) {
     return fetch(url, options).then(function (response) {
       return response.json()
-        .catch(function () {
-          return {
-            error: "服务器返回了无效 JSON"
-          };
-        })
+        .catch(function () { return { error: "服务器返回了无效 JSON" }; })
         .then(function (body) {
           if (!response.ok) {
-            var message =
-              body && body.error
-                ? body.error
-                : "请求失败：" + response.status;
-
+            var message = body && body.error ? body.error : "请求失败：" + response.status;
             var error = new Error(message);
             error.status = response.status;
             error.body = body;
-
             throw error;
           }
-
           return body;
         });
     });
   }
 
   // ---------------------------------------------------------------------------
-  // Canvas 背景
+  // Tab 切换逻辑 & 移动端 Drawer
   // ---------------------------------------------------------------------------
+  var navItems = document.querySelectorAll(".nav-item");
+  var tabPanels = document.querySelectorAll(".tab-panel");
+  var sidebar = byId("sidebar");
+  var menuToggle = byId("menu-toggle");
 
+  if (menuToggle) {
+    menuToggle.addEventListener("click", function () {
+      sidebar.classList.toggle("open");
+    });
+  }
+
+  navItems.forEach(function (item) {
+    item.addEventListener("click", function () {
+      var targetTab = this.getAttribute("data-tab");
+      navItems.forEach(function (el) { el.classList.remove("active"); });
+      tabPanels.forEach(function (el) { el.classList.remove("active"); });
+
+      this.classList.add("active");
+      var activePanel = byId("tab-" + targetTab);
+      if (activePanel) { activePanel.classList.add("active"); }
+
+      if (sidebar.classList.contains("open")) {
+        sidebar.classList.remove("open");
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Canvas 动态背景
+  // ---------------------------------------------------------------------------
   (function setupBackground() {
-    if (
-      window.matchMedia &&
-      window.matchMedia(
-        "(prefers-reduced-motion: reduce)"
-      ).matches
-    ) {
-      return;
-    }
-
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) { return; }
     var canvas = byId("bg");
     var context = canvas.getContext("2d");
-
     if (!context) return;
 
-    var width = 0;
-    var height = 0;
-    var particles = [];
+    var width = 0, height = 0, particles = [];
 
     function createParticles() {
-      var count = Math.min(
-        70,
-        Math.floor(
-          (width * height) / 18000
-        )
-      );
-
+      var count = Math.min(60, Math.floor((width * height) / 20000));
       particles = [];
-
-      for (var index = 0; index < count; index++) {
+      for (var i = 0; i < count; i++) {
         particles.push({
           x: Math.random() * width,
           y: Math.random() * height,
@@ -1525,1373 +1569,472 @@ const PAGE_HTML = `<!DOCTYPE html>
     }
 
     function resize() {
-      var ratio = Math.min(
-        window.devicePixelRatio || 1,
-        2
-      );
-
+      var ratio = Math.min(window.devicePixelRatio || 1, 2);
       width = window.innerWidth;
       height = window.innerHeight;
-
       canvas.width = Math.floor(width * ratio);
       canvas.height = Math.floor(height * ratio);
       canvas.style.width = width + "px";
       canvas.style.height = height + "px";
-
-      context.setTransform(
-        ratio,
-        0,
-        0,
-        ratio,
-        0,
-        0
-      );
-
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
       createParticles();
     }
 
     function tick() {
-      context.clearRect(
-        0,
-        0,
-        width,
-        height
-      );
-
-      context.fillStyle =
-        "rgba(0,212,170,0.55)";
-
-      for (
-        var index = 0;
-        index < particles.length;
-        index++
-      ) {
-        var particle = particles[index];
-
-        particle.x += particle.vx;
-        particle.y += particle.vy;
-
-        if (
-          particle.x < 0 ||
-          particle.x > width
-        ) {
-          particle.vx *= -1;
-        }
-
-        if (
-          particle.y < 0 ||
-          particle.y > height
-        ) {
-          particle.vy *= -1;
-        }
-
+      context.clearRect(0, 0, width, height);
+      context.fillStyle = "rgba(0,212,170,0.55)";
+      for (var i = 0; i < particles.length; i++) {
+        var p = particles[i];
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0 || p.x > width) p.vx *= -1;
+        if (p.y < 0 || p.y > height) p.vy *= -1;
         context.beginPath();
-        context.arc(
-          particle.x,
-          particle.y,
-          1.6,
-          0,
-          Math.PI * 2
-        );
+        context.arc(p.x, p.y, 1.5, 0, Math.PI * 2);
         context.fill();
       }
-
-      for (
-        var first = 0;
-        first < particles.length;
-        first++
-      ) {
-        for (
-          var second = first + 1;
-          second < particles.length;
-          second++
-        ) {
-          var deltaX =
-            particles[first].x -
-            particles[second].x;
-
-          var deltaY =
-            particles[first].y -
-            particles[second].y;
-
-          var distance = Math.sqrt(
-            deltaX * deltaX +
-            deltaY * deltaY
-          );
-
-          if (distance < 130) {
-            context.strokeStyle =
-              "rgba(124,92,255," +
-              (
-                0.18 *
-                (1 - distance / 130)
-              ) +
-              ")";
-
-            context.lineWidth = 1;
-            context.beginPath();
-
-            context.moveTo(
-              particles[first].x,
-              particles[first].y
-            );
-
-            context.lineTo(
-              particles[second].x,
-              particles[second].y
-            );
-
-            context.stroke();
-          }
-        }
-      }
-
       requestAnimationFrame(tick);
     }
 
+    window.addEventListener("resize", resize);
     resize();
-
-    window.addEventListener(
-      "resize",
-      resize
-    );
-
-    requestAnimationFrame(tick);
+    tick();
   })();
 
   // ---------------------------------------------------------------------------
-  // 技术徽章
+  // 加载系统 Overview 统计
   // ---------------------------------------------------------------------------
+  function loadOverview() {
+    requestJson("/api/info").then(function (info) {
+      var container = byId("overview-stats");
+      if (!container) return;
 
-  var badgeNames = [
-    "Deno.serve",
-    "WebSocket",
-    "BroadcastChannel",
-    "Deno KV",
-    "Server-Sent Events",
-    "Web Crypto",
-    "V8 Isolate",
-    "零构建"
-  ];
-
-  badgeNames.forEach(function (name) {
-    var badge = document.createElement("span");
-
-    badge.className = "badge";
-    badge.textContent = name;
-
-    byId("badges").appendChild(badge);
-  });
-
-  // ---------------------------------------------------------------------------
-  // 运行时信息
-  // ---------------------------------------------------------------------------
-
-  requestJson("/api/info")
-    .then(function (info) {
+      var uptimeSec = Math.floor((Date.now() - info.bootTime) / 1000);
       var items = [
-        ["Deno 版本", info.denoVersion],
-        ["V8 引擎", info.v8Version],
-        ["TypeScript", info.tsVersion],
-        ["运行区域", info.region],
-        ["实例存活", info.uptime + "s"],
-        [
-          "KV 状态",
-          info.kvAvailable
-            ? "✅ 已连接"
-            : "⚠️ 不可用"
-        ]
+        { label: "Deno Version", val: info.denoVersion || "N/A" },
+        { label: "V8 Engine", val: info.v8Version || "N/A" },
+        { label: "部署 Region", val: info.region || "Local / Edge" },
+        { label: "运行时时长", val: uptimeSec + " 秒" },
+        { label: "最新 Cron 心跳", val: info.lastCronTick ? new Date(info.lastCronTick).toLocaleTimeString() : "尚未心跳" }
       ];
 
-      var container =
-        byId("runtime-stats");
+      setText("cron-tick", info.lastCronTick ? new Date(info.lastCronTick).toLocaleString() : "未检测到 Cron 心跳");
 
-      items.forEach(function (item) {
-        var block =
-          document.createElement("div");
-
-        var value =
-          document.createElement("div");
-
-        var label =
-          document.createElement("div");
-
-        block.className = "stat-block";
-        value.className = "stat small";
-        label.className = "stat-label";
-
-        value.textContent = String(item[1]);
-        label.textContent = item[0];
-
-        block.appendChild(value);
-        block.appendChild(label);
-        container.appendChild(block);
-      });
-
-      if (!info.kvAvailable) {
-        var warning = byId("kv-warning");
-
-        warning.classList.remove("hidden");
-
-        warning.textContent =
-          "KV 不可用：" +
-          (
-            info.kvError ||
-            "未获得具体错误信息"
-          );
-      }
-    })
-    .catch(function (error) {
-      var warning = byId("kv-warning");
-
-      warning.classList.remove("hidden");
-      warning.textContent =
-        "运行时信息加载失败：" +
-        error.message;
+      container.innerHTML = items.map(function (it) {
+        return '<div class="stat-card"><div class="stat-val">' + it.val + '</div><div class="stat-lbl">' + it.label + '</div></div>';
+      }).join("");
+    }).catch(function (err) {
+      console.error("加载 Overview 失败:", err);
     });
+  }
+  loadOverview();
 
   // ---------------------------------------------------------------------------
-  // 访问计数
+  // Web Crypto (HMAC & SHA-256)
   // ---------------------------------------------------------------------------
-
-  requestJson("/api/visit", {
-    method: "POST"
-  })
-    .then(function (data) {
-      setText(
-        "visit-count",
-        data.count
-      );
-    })
-    .catch(function (error) {
-      var count = byId("visit-count");
-
-      count.textContent = "—";
-      count.style.color = "#8b95a5";
-      count.style.fontSize = "16px";
-
-      setText(
-        "visit-label",
-        error.status === 503
-          ? "KV 未挂载或 KV API 未启用"
-          : "访问计数加载失败：" +
-            error.message
-      );
-    });
-
-  // ---------------------------------------------------------------------------
-  // SHA-256
-  // ---------------------------------------------------------------------------
-
-  function calculateHash() {
-    var button = byId("hash-btn");
-    var output = byId("hash-out");
-    var input = byId("hash-input");
-    var text = input.value;
-
-    button.disabled = true;
-    output.textContent = "计算中…";
-
-    requestJson("/api/hash", {
-      method: "POST",
-      headers: {
-        "content-type":
-          "text/plain; charset=utf-8"
-      },
-      body: text
-    })
-      .then(function (data) {
-        output.textContent = data.sha256;
-      })
-      .catch(function (error) {
-        output.textContent =
-          "错误：" + error.message;
-      })
-      .finally(function () {
-        button.disabled = false;
+  var hmacBtn = byId("hmac-btn");
+  if (hmacBtn) {
+    hmacBtn.addEventListener("click", function () {
+      var text = (byId("hmac-input").value || "").trim();
+      setText("hmac-out", "计算中...");
+      requestJson("/api/crypto-sign", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: text })
+      }).then(function (res) {
+        setText("hmac-out", "算法: " + res.algorithm + "\n签名: " + res.signature);
+      }).catch(function (err) {
+        setText("hmac-out", "失败: " + err.message);
       });
+    });
   }
 
-  byId("hash-btn").addEventListener(
-    "click",
-    calculateHash
-  );
-
-  byId("hash-input").addEventListener(
-    "keydown",
-    function (event) {
-      if (
-        event.key === "Enter" &&
-        !event.isComposing
-      ) {
-        calculateHash();
-      }
-    }
-  );
-
-  // ---------------------------------------------------------------------------
-  // SSE
-  // ---------------------------------------------------------------------------
-
-  var activeEventSource = null;
-
-  byId("stream-btn").addEventListener(
-    "click",
-    function () {
-      var output = byId("stream-out");
-      var button = byId("stream-btn");
-
-      if (activeEventSource) {
-        activeEventSource.close();
-        activeEventSource = null;
-      }
-
-      output.textContent = "";
-
-      var initialCursor =
-        document.createElement("span");
-
-      initialCursor.className = "cursor";
-      output.appendChild(initialCursor);
-
-      button.disabled = true;
-
-      var eventSource =
-        new EventSource("/api/stream");
-
-      activeEventSource = eventSource;
-
-      var buffer = "";
-      var completed = false;
-
-      function render(showCursor) {
-        output.textContent = buffer;
-
-        if (showCursor) {
-          var cursor =
-            document.createElement("span");
-
-          cursor.className = "cursor";
-          output.appendChild(cursor);
-        }
-      }
-
-      eventSource.onmessage = function (event) {
-        try {
-          var data = JSON.parse(event.data);
-
-          if (
-            typeof data.chunk === "string"
-          ) {
-            buffer += data.chunk;
-            render(true);
-          }
-        } catch (_) {
-          // 忽略格式错误项
-        }
-      };
-
-      eventSource.addEventListener(
-        "done",
-        function () {
-          completed = true;
-          render(false);
-          eventSource.close();
-
-          if (
-            activeEventSource === eventSource
-          ) {
-            activeEventSource = null;
-          }
-
-          button.disabled = false;
-        }
-      );
-
-      eventSource.onerror = function () {
-        eventSource.close();
-
-        if (
-          activeEventSource === eventSource
-        ) {
-          activeEventSource = null;
-        }
-
-        if (!completed) {
-          if (!buffer) {
-            output.textContent =
-              "流式连接失败，请稍后重试。";
-          } else {
-            render(false);
-          }
-        }
-
-        button.disabled = false;
-      };
-    }
-  );
+  var hashBtn = byId("hash-btn");
+  if (hashBtn) {
+    hashBtn.addEventListener("click", function () {
+      var text = byId("hash-input").value;
+      setText("hash-out", "计算中...");
+      requestJson("/api/hash", {
+        method: "POST",
+        headers: { "content-type": "text/plain; charset=utf-8" },
+        body: text
+      }).then(function (res) {
+        setText("hash-out", "算法: " + res.algorithm + " (" + res.bytes + " 字节)\nSHA-256: " + res.sha256);
+      }).catch(function (err) {
+        setText("hash-out", "失败: " + err.message);
+      });
+    });
+  }
 
   // ---------------------------------------------------------------------------
-  // WebSocket (现代聊天气泡与系统提示渲染)
+  // Deno KV (Atomic Visits, TTL Cache, Guestbook)
   // ---------------------------------------------------------------------------
-
-  (function setupWebSocket() {
-    var socket = null;
-    var reconnectTimer = null;
-    var reconnectAttempt = 0;
-    var manuallyClosed = false;
-
-    var log = byId("chatlog");
-    var input = byId("chat-input");
-    var sendButton = byId("chat-send");
-    var status = byId("ws-status");
-    var statusText = byId(
-      "ws-status-text"
-    );
-
-    function formatTime(ts) {
-      var date = ts ? new Date(ts) : new Date();
-      var hours = String(date.getHours()).padStart(2, '0');
-      var mins = String(date.getMinutes()).padStart(2, '0');
-      return hours + ":" + mins;
-    }
-
-    // 格式化渲染：系统居中提示、自己右对齐气泡、别人左对齐气泡
-    function addChatMessage(msg) {
-      var row = document.createElement("div");
-
-      if (msg.type === "system") {
-        row.className = "msg-row sys-row";
-
-        var badge = document.createElement("div");
-        badge.className = "sys-badge";
-        badge.textContent = msg.text;
-
-        row.appendChild(badge);
-      } else if (msg.type === "chat") {
-        row.className = "msg-row " + (msg.self ? "me-row" : "other-row");
-
-        if (!msg.self && msg.name) {
-          var author = document.createElement("div");
-          author.className = "msg-author";
-          author.textContent = msg.name;
-          row.appendChild(author);
-        }
-
-        var bubble = document.createElement("div");
-        bubble.className = "msg-bubble";
-
-        var textNode = document.createTextNode(msg.text);
-        var timeSpan = document.createElement("span");
-        timeSpan.className = "msg-time";
-        timeSpan.textContent = formatTime(msg.ts);
-
-        bubble.appendChild(textNode);
-        bubble.appendChild(timeSpan);
-        row.appendChild(bubble);
-      }
-
-      log.appendChild(row);
-      log.scrollTop = log.scrollHeight;
-
-      while (log.children.length > 200) {
-        log.removeChild(log.firstChild);
-      }
-    }
-
-    function setStatus(
-      state,
-      text
-    ) {
-      status.className =
-        "status" +
-        (state ? " " + state : "");
-
-      statusText.textContent = text;
-    }
-
-    function scheduleReconnect() {
-      if (
-        manuallyClosed ||
-        reconnectTimer
-      ) {
-        return;
-      }
-
-      reconnectAttempt += 1;
-
-      var delay = Math.min(
-        1000 * Math.pow(
-          2,
-          reconnectAttempt - 1
-        ),
-        15000
-      );
-
-      setStatus(
-        "disconnected",
-        "将在 " +
-          Math.ceil(delay / 1000) +
-          "s 后重连"
-      );
-
-      reconnectTimer =
-        window.setTimeout(
-          function () {
-            reconnectTimer = null;
-            connect();
-          },
-          delay
-        );
-    }
-
-    function connect() {
-      if (
-        socket &&
-        (
-          socket.readyState ===
-            WebSocket.OPEN ||
-          socket.readyState ===
-            WebSocket.CONNECTING
-        )
-      ) {
-        return;
-      }
-
-      setStatus("", "连接中");
-      sendButton.disabled = true;
-
-      var protocol =
-        location.protocol === "https:"
-          ? "wss:"
-          : "ws:";
-
-      socket = new WebSocket(
-        protocol +
-          "//" +
-          location.host +
-          "/ws"
-      );
-
-      socket.onopen = function () {
-        reconnectAttempt = 0;
-
-        setStatus(
-          "connected",
-          "已连接"
-        );
-
-        sendButton.disabled = false;
-      };
-
-      socket.onmessage = function (event) {
-        var message;
-
-        try {
-          message = JSON.parse(event.data);
-        } catch (_) {
-          return;
-        }
-
-        if (message.type === "identity") {
-          addChatMessage({
-            type: "system",
-            text: "你的随机代号是: " + message.name
-          });
-          return;
-        }
-
-        if (message.type === "presence") {
-          if (
-            typeof message.online ===
-              "number"
-          ) {
-            setText(
-              "online-count",
-              message.online
-            );
-          }
-
-          return;
-        }
-
-        if (message.type === "system" || message.type === "chat") {
-          addChatMessage(message);
-        }
-      };
-
-      socket.onerror = function () {
-        setStatus(
-          "disconnected",
-          "连接异常"
-        );
-      };
-
-      socket.onclose = function () {
-        sendButton.disabled = true;
-
-        setText(
-          "online-count",
-          "0"
-        );
-
-        scheduleReconnect();
-      };
-    }
-
-    function send() {
-      var value = input.value.trim();
-
-      if (!value) return;
-
-      if (
-        !socket ||
-        socket.readyState !==
-          WebSocket.OPEN
-      ) {
-        addChatMessage({
-          type: "system",
-          text: "WebSocket 尚未连接"
-        });
-
-        return;
-      }
-
-      socket.send(
-        JSON.stringify({
-          text: value
-        })
-      );
-
-      input.value = "";
-      input.focus();
-    }
-
-    sendButton.addEventListener(
-      "click",
-      send
-    );
-
-    input.addEventListener(
-      "keydown",
-      function (event) {
-        if (
-          event.key === "Enter" &&
-          !event.isComposing
-        ) {
-          event.preventDefault();
-          send();
-        }
-      }
-    );
-
-    window.addEventListener(
-      "beforeunload",
-      function () {
-        manuallyClosed = true;
-
-        if (reconnectTimer) {
-          clearTimeout(reconnectTimer);
-        }
-
-        if (socket) {
-          socket.close(
-            1000,
-            "page unload"
-          );
-        }
-      }
-    );
-
-    connect();
-  })();
-
-  // ---------------------------------------------------------------------------
-  // 留言板
-  // ---------------------------------------------------------------------------
-
-  function renderGuestbook(entries) {
-    var container =
-      byId("guestbook-list");
-
-    container.textContent = "";
-
-    if (!entries.length) {
-      var empty =
-        document.createElement("div");
-
-      empty.className = "gb-entry";
-      empty.style.color = "#8b95a5";
-      empty.textContent =
-        "还没有留言，来第一个吧～";
-
-      container.appendChild(empty);
-      return;
-    }
-
-    entries.forEach(function (entry) {
-      var wrapper =
-        document.createElement("div");
-
-      var name =
-        document.createElement("b");
-
-      var separator =
-        document.createTextNode(": ");
-
-      var text =
-        document.createTextNode(
-          String(entry.text)
-        );
-
-      var time =
-        document.createElement("div");
-
-      wrapper.className = "gb-entry";
-      name.textContent = String(entry.name);
-      time.className = "gb-time";
-
-      var timestamp = Number(entry.ts);
-
-      if (Number.isFinite(timestamp)) {
-        time.textContent =
-          new Date(timestamp)
-            .toLocaleString("zh-CN");
-      } else {
-        time.textContent = "未知时间";
-      }
-
-      wrapper.appendChild(name);
-      wrapper.appendChild(separator);
-      wrapper.appendChild(text);
-      wrapper.appendChild(time);
-      container.appendChild(wrapper);
+  function bumpVisits() {
+    requestJson("/api/visit", { method: "POST" }).then(function (res) {
+      setText("visit-count", res.count != null ? Number(res.count).toLocaleString() : "–");
+    }).catch(function () {
+      setText("visit-count", "–");
+    });
+  }
+  bumpVisits();
+
+  var ttlBtn = byId("ttl-btn");
+  if (ttlBtn) {
+    ttlBtn.addEventListener("click", function () {
+      setText("ttl-out", "写入中...");
+      requestJson("/api/kv-cache", { method: "POST" }).then(function (res) {
+        setText("ttl-out", "状态: " + res.status + "\nKey: " + JSON.stringify(res.key) + "\nTTL: " + res.ttlSeconds + " 秒后物理消除");
+      }).catch(function (err) {
+        setText("ttl-out", "写入失败: " + err.message);
+      });
     });
   }
 
   function loadGuestbook() {
-    var container =
-      byId("guestbook-list");
-
-    container.textContent = "正在加载…";
-
-    return requestJson("/api/guestbook")
-      .then(function (entries) {
-        if (!Array.isArray(entries)) {
-          throw new Error(
-            "留言板返回格式无效"
-          );
-        }
-
-        renderGuestbook(entries);
-      })
-      .catch(function (error) {
-        container.textContent = "";
-
-        var warning =
-          document.createElement("div");
-
-        warning.className = "gb-entry";
-        warning.style.color = "#8b95a5";
-        warning.textContent =
-          "⚠️ " + error.message;
-
-        container.appendChild(warning);
-
-        if (error.status === 503) {
-          byId("gb-send").disabled = true;
-        }
-
-        throw error;
-      });
+    requestJson("/api/guestbook").then(function (entries) {
+      var list = byId("guestbook-list");
+      if (!list) return;
+      if (!Array.isArray(entries) || entries.length === 0) {
+        list.innerHTML = '<div style="color:var(--muted); font-size:13px; padding:10px 0;">暂无留言</div>';
+        return;
+      }
+      list.innerHTML = entries.map(function (e) {
+        var time = new Date(e.ts).toLocaleString();
+        return '<div style="padding:10px 0; border-bottom:1px solid var(--border); font-size:13px;"><b style="color:var(--accent);">' + e.name + '</b>: ' + e.text + '<div style="color:var(--muted); font-size:11px; margin-top:2px;">' + time + '</div></div>';
+      }).join("");
+    }).catch(function (err) {
+      console.error("加载留言失败:", err);
+    });
   }
+  loadGuestbook();
 
-  function submitGuestbook() {
-    var button = byId("gb-send");
-    var nameInput = byId("gb-name");
-    var textInput = byId("gb-text");
-
-    var name =
-      nameInput.value.trim() ||
-      "匿名";
-
-    var text =
-      textInput.value.trim();
-
-    if (!text) {
-      textInput.focus();
-      return;
-    }
-
-    button.disabled = true;
-    button.textContent = "提交中…";
-
-    requestJson(
-      "/api/guestbook",
-      {
+  var gbSend = byId("gb-send");
+  if (gbSend) {
+    gbSend.addEventListener("click", function () {
+      var name = (byId("gb-name").value || "").trim();
+      var text = (byId("gb-text").value || "").trim();
+      if (!text) return;
+      gbSend.disabled = true;
+      requestJson("/api/guestbook", {
         method: "POST",
-        headers: {
-          "content-type":
-            "application/json"
-        },
-        body: JSON.stringify({
-          name: name,
-          text: text
-        })
-      }
-    )
-      .then(function () {
-        textInput.value = "";
-        return loadGuestbook();
-      })
-      .catch(function (error) {
-        window.alert(
-          "提交失败：" +
-            error.message
-        );
-      })
-      .finally(function () {
-        if (
-          !button.disabled ||
-          button.textContent === "提交中…"
-        ) {
-          button.disabled = false;
-        }
-
-        button.textContent = "提交";
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: name, text: text })
+      }).then(function () {
+        byId("gb-text").value = "";
+        loadGuestbook();
+      }).finally(function () {
+        gbSend.disabled = false;
       });
+    });
   }
 
-  byId("gb-send").addEventListener(
-    "click",
-    submitGuestbook
-  );
+  // ---------------------------------------------------------------------------
+  // SSE 流式响应
+  // ---------------------------------------------------------------------------
+  var streamBtn = byId("stream-btn");
+  if (streamBtn) {
+    streamBtn.addEventListener("click", function () {
+      var out = byId("stream-out");
+      out.innerHTML = "";
+      var cursor = document.createElement("span");
+      cursor.className = "cursor";
+      out.appendChild(cursor);
 
-  byId("gb-text").addEventListener(
-    "keydown",
-    function (event) {
-      if (
-        event.key === "Enter" &&
-        !event.isComposing
-      ) {
-        event.preventDefault();
-        submitGuestbook();
+      var source = new EventSource("/api/stream");
+      source.onmessage = function (event) {
+        try {
+          var payload = JSON.parse(event.data);
+          if (payload.chunk) {
+            var textNode = document.createTextNode(payload.chunk);
+            out.insertBefore(textNode, cursor);
+          }
+        } catch (e) { console.error(e); }
+      };
+
+      source.addEventListener("done", function () {
+        source.close();
+        if (cursor.parentNode) cursor.parentNode.removeChild(cursor);
+      });
+
+      source.onerror = function () {
+        source.close();
+        if (cursor.parentNode) cursor.parentNode.removeChild(cursor);
+      };
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // WebSocket 聊天
+  // ---------------------------------------------------------------------------
+  (function setupWebSocket() {
+    var wsStatus = byId("ws-status");
+    var wsStatusText = byId("ws-status-text");
+    var chatlog = byId("chatlog");
+    var chatInput = byId("chat-input");
+    var chatSend = byId("chat-send");
+    var onlineCount = byId("online-count");
+
+    var protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    var wsUrl = protocol + "//" + location.host + "/ws";
+    var socket = null;
+
+    function appendMsg(html) {
+      if (!chatlog) return;
+      var div = document.createElement("div");
+      div.innerHTML = html;
+      var el = div.firstElementChild;
+      if (el) {
+        chatlog.appendChild(el);
+        chatlog.scrollTop = chatlog.scrollHeight;
       }
     }
-  );
 
-  loadGuestbook().catch(function () {
-    // 错误已被内部捕获
-  });
+    function connect() {
+      try { socket = new WebSocket(wsUrl); } catch (e) { return; }
+
+      socket.onopen = function () {
+        if (wsStatus) wsStatus.className = "status connected";
+        if (wsStatusText) wsStatusText.textContent = "已连接";
+        if (chatSend) chatSend.disabled = false;
+      };
+
+      socket.onmessage = function (event) {
+        try {
+          var msg = JSON.parse(event.data);
+          var time = msg.ts ? new Date(msg.ts).toLocaleTimeString() : "";
+          if (msg.type === "presence") {
+            if (onlineCount) onlineCount.textContent = String(msg.online);
+          } else if (msg.type === "system") {
+            appendMsg('<div class="msg-row sys-row"><div class="sys-badge">' + msg.text + '</div></div>');
+          } else if (msg.type === "chat") {
+            var cls = msg.self ? "me-row" : "other-row";
+            appendMsg('<div class="msg-row ' + cls + '"><div class="msg-author">' + msg.name + '</div><div class="msg-bubble">' + msg.text + '<span class="msg-time">' + time + '</span></div></div>');
+          }
+        } catch (e) { console.error(e); }
+      };
+
+      socket.onclose = function () {
+        if (wsStatus) wsStatus.className = "status disconnected";
+        if (wsStatusText) wsStatusText.textContent = "已断开";
+        if (chatSend) chatSend.disabled = true;
+        setTimeout(connect, 3000);
+      };
+    }
+
+    function sendChat() {
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      var text = (chatInput.value || "").trim();
+      if (!text) return;
+      socket.send(JSON.stringify({ text: text }));
+      chatInput.value = "";
+    }
+
+    if (chatSend) chatSend.addEventListener("click", sendChat);
+    if (chatInput) {
+      chatInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") sendChat();
+      });
+    }
+
+    connect();
+  })();
 })();
 </script>
 </body>
 </html>`;
 
 // -----------------------------------------------------------------------------
-// HTTP 安全响应头
+// 诊断信息与运行状态 API
 // -----------------------------------------------------------------------------
 
-const COMMON_SECURITY_HEADERS: Readonly<
-  Record<string, string>
-> = {
-  "x-content-type-options": "nosniff",
-  "x-frame-options": "DENY",
-  "referrer-policy":
-    "strict-origin-when-cross-origin",
-  "permissions-policy":
-    "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
-  "cross-origin-opener-policy": "same-origin",
-};
-
-function withSecurityHeaders(
-  response: Response,
-): Response {
-  if (response.status === 101) {
-    return response;
-  }
-
-  const headers = new Headers(
-    response.headers,
-  );
-
-  for (
-    const [name, value] of
-      Object.entries(COMMON_SECURITY_HEADERS)
-  ) {
-    if (!headers.has(name)) {
-      headers.set(name, value);
+async function getDiagnostics() {
+  let lastCronTick: string | null = null;
+  if (kv) {
+    try {
+      const entry = await kv.get<string>(["stats", "last_cron_tick"]);
+      lastCronTick = entry.value;
+    } catch {
+      lastCronTick = null;
     }
   }
 
-  return new Response(
-    response.body,
-    {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    },
-  );
-}
-
-function htmlResponse(
-  html: string,
-): Response {
-  return new Response(
-    html,
-    {
-      headers: {
-        "content-type":
-          "text/html; charset=utf-8",
-        "cache-control":
-          "no-cache",
-        "content-security-policy": [
-          "default-src 'self'",
-          "script-src 'self' 'unsafe-inline'",
-          "style-src 'self' 'unsafe-inline'",
-          "img-src 'self' data:",
-          "font-src 'self'",
-          "connect-src 'self' ws: wss:",
-          "object-src 'none'",
-          "base-uri 'none'",
-          "form-action 'self'",
-          "frame-ancestors 'none'",
-        ].join("; "),
-      },
-    },
-  );
-}
-
-// -----------------------------------------------------------------------------
-// 运行时信息
-// -----------------------------------------------------------------------------
-
-function getRuntimeInfo() {
   return {
-    app: APP_NAME,
-
-    denoVersion:
-      Deno.version.deno,
-
-    v8Version:
-      Deno.version.v8,
-
-    tsVersion:
-      Deno.version.typescript,
-
-    region:
-      Deno.env.get("DENO_REGION") ??
-      "local",
-
-    uptime:
-      Math.round(
-        (Date.now() - BOOT_TIME) /
-          1000,
-      ),
-
-    deploymentId:
-      Deno.env.get(
-        "DENO_DEPLOYMENT_ID",
-      ) ?? "playground",
-
-    instanceId:
-      INSTANCE_ID,
-
+    appName: APP_NAME,
+    bootTime: BOOT_TIME,
+    instanceId: INSTANCE_ID,
+    region: Deno.env.get("DENO_REGION") ?? "local",
+    denoVersion: Deno.version.deno,
+    v8Version: Deno.version.v8,
+    typescriptVersion: Deno.version.typescript,
     kvApiAvailable,
-    kvAvailable: kv !== null,
+    kvConnected: kv !== null,
     kvError,
-
-    localWebSocketConnections:
-      clients.size,
-
-    now:
-      new Date().toISOString(),
+    lastCronTick,
   };
 }
 
-// -----------------------------------------------------------------------------
-// 部署能力诊断
-// -----------------------------------------------------------------------------
+function withSecurityHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
 
-function getDiagnostics() {
-  const runtime = Deno as typeof Deno & {
-    upgradeWebSocket?: unknown;
-    serve?: unknown;
-  };
+  headers.set(
+    "strict-transport-security",
+    "max-age=63072000; includeSubDomains; preload",
+  );
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("x-frame-options", "DENY");
+  headers.set("referrer-policy", "strict-origin-when-cross-origin");
 
-  const kvDiagnosis =
-    kv !== null
-      ? "Deno KV 已成功初始化。"
-      : kvApiAvailable
-      ? (
-        "Deno.openKv 已存在，但数据库初始化失败。" +
-        "请检查数据库关联状态、部署日志和数据库服务状态。"
-      )
-      : (
-        "当前运行时没有暴露 Deno.openKv。" +
-        "请确认数据库已连接到该 App，" +
-        "并在关联数据库后创建一次全新 Deployment。"
-      );
-
-  return {
-    app: APP_NAME,
-    timestamp:
-      new Date().toISOString(),
-
-    runtime: {
-      deno:
-        Deno.version.deno,
-
-      v8:
-        Deno.version.v8,
-
-      typescript:
-        Deno.version.typescript,
-
-      userAgent:
-        navigator.userAgent,
-    },
-
-    deployment: {
-      region:
-        Deno.env.get(
-          "DENO_REGION",
-        ) ?? null,
-
-      deploymentId:
-        Deno.env.get(
-          "DENO_DEPLOYMENT_ID",
-        ) ?? null,
-
-      instanceId:
-        INSTANCE_ID,
-
-      uptimeSeconds:
-        Math.round(
-          (Date.now() - BOOT_TIME) /
-            1000,
-        ),
-    },
-
-    capabilities: {
-      denoServe:
-        typeof runtime.serve ===
-          "function",
-
-      denoUpgradeWebSocket:
-        typeof runtime
-            .upgradeWebSocket ===
-          "function",
-
-      denoOpenKv:
-        kvApiAvailable,
-
-      readableStream:
-        typeof ReadableStream ===
-          "function",
-
-      webCrypto:
-        typeof crypto !==
-          "undefined" &&
-        typeof crypto.subtle
-            ?.digest ===
-          "function",
-
-      randomUUID:
-        typeof crypto !==
-          "undefined" &&
-        typeof crypto.randomUUID ===
-          "function",
-    },
-
-    kv: {
-      apiExposed:
-        kvApiAvailable,
-
-      connected:
-        kv !== null,
-
-      error:
-        kvError,
-
-      diagnosis:
-        kvDiagnosis,
-    },
-
-    realtime: {
-      localWebSocketConnections:
-        clients.size,
-
-      onlineCountScope:
-        "current-instance",
-
-      note:
-        "使用 Deno KV Watch 机制全网广播点对点通信。",
-    },
-
-    limits: {
-      maxHashBytes:
-        MAX_HASH_BYTES,
-
-      maxJsonBytes:
-        MAX_JSON_BYTES,
-
-      maxWebSocketFrameBytes:
-        MAX_WS_FRAME_BYTES,
-
-      maxGuestbookNameLength:
-        MAX_GUESTBOOK_NAME_LENGTH,
-
-      maxGuestbookTextLength:
-        MAX_GUESTBOOK_TEXT_LENGTH,
-
-      maxChatTextLength:
-        MAX_CHAT_TEXT_LENGTH,
-    },
-  };
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 // -----------------------------------------------------------------------------
-// 健康检查
+// 核心 HTTP 路由 Handler
 // -----------------------------------------------------------------------------
 
-function getHealthInfo() {
-  return {
-    ok: true,
-
-    status:
-      kv !== null
-        ? "healthy"
-        : "degraded",
-
-    kvAvailable:
-      kv !== null,
-
-    kvApiAvailable,
-
-    localWebSocketConnections:
-      clients.size,
-
-    uptimeSeconds:
-      Math.round(
-        (Date.now() - BOOT_TIME) /
-          1000,
-      ),
-
-    instanceId:
-      INSTANCE_ID,
-
-    timestamp:
-      new Date().toISOString(),
-  };
-}
-
-// -----------------------------------------------------------------------------
-// 主路由
-// -----------------------------------------------------------------------------
-
-async function handleRequest(
-  req: Request,
-): Promise<Response> {
+async function handleRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const pathname = url.pathname;
 
-  if (pathname === "/") {
-    if (
-      req.method !== "GET" &&
-      req.method !== "HEAD"
-    ) {
-      return methodNotAllowed([
-        "GET",
-        "HEAD",
-      ]);
+  if (pathname === "/" || pathname === "/index.html") {
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      return methodNotAllowed(["GET", "HEAD"]);
     }
 
-    if (req.method === "HEAD") {
-      return new Response(
-        null,
-        {
-          headers: {
-            "content-type":
-              "text/html; charset=utf-8",
-
-            "cache-control":
-              "no-cache",
-          },
-        },
-      );
-    }
-
-    return htmlResponse(PAGE_HTML);
-  }
-
-  if (pathname === "/favicon.ico") {
-    if (
-      req.method !== "GET" &&
-      req.method !== "HEAD"
-    ) {
-      return methodNotAllowed([
-        "GET",
-        "HEAD",
-      ]);
-    }
-
-    return new Response(
-      null,
-      {
-        status: 204,
-        headers: {
-          "cache-control":
-            "public, max-age=86400",
-        },
+    return new Response(PAGE_HTML, {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-cache",
       },
-    );
+    });
   }
 
   if (pathname === "/health") {
-    if (
-      req.method !== "GET" &&
-      req.method !== "HEAD"
-    ) {
-      return methodNotAllowed([
-        "GET",
-        "HEAD",
-      ]);
+    if (req.method !== "GET") {
+      return methodNotAllowed(["GET"]);
     }
 
-    if (req.method === "HEAD") {
-      return new Response(
-        null,
-        {
-          status: 200,
-          headers: {
-            "cache-control":
-              "no-store",
-          },
-        },
-      );
-    }
-
-    return jsonResponse(
-      getHealthInfo(),
-    );
+    return jsonResponse({
+      status: "ok",
+      uptime: Math.floor((Date.now() - BOOT_TIME) / 1000),
+      instanceId: INSTANCE_ID,
+    });
   }
 
-  if (pathname === "/api/info") {
+  if (pathname === "/api/info" || pathname === "/api/diagnostics") {
     if (req.method !== "GET") {
-      return methodNotAllowed([
-        "GET",
-      ]);
+      return methodNotAllowed(["GET"]);
     }
 
-    return jsonResponse(
-      getRuntimeInfo(),
-    );
+    const diag = await getDiagnostics();
+    return jsonResponse(diag);
   }
 
-  if (
-    pathname ===
-      "/api/diagnostics"
-  ) {
-    if (req.method !== "GET") {
-      return methodNotAllowed([
-        "GET",
-      ]);
+  // Web Crypto HMAC 安全验签 API
+  if (pathname === "/api/crypto-sign") {
+    if (req.method !== "POST") {
+      return methodNotAllowed(["POST"]);
     }
 
-    return jsonResponse(
-      getDiagnostics(),
+    checkRateLimit(req, "crypto-sign", 30, 60_000);
+
+    const body = (await readJsonBody(req, MAX_JSON_BYTES)) as { text?: unknown };
+    const text = normalizeText(body.text, 2000);
+    const secretKey = Deno.env.get("SECRET_KEY") ?? "deno-default-secret";
+
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secretKey),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
     );
+
+    const signatureBuffer = await crypto.subtle.sign(
+      "HMAC",
+      key,
+      new TextEncoder().encode(text),
+    );
+
+    const signature = Array.from(new Uint8Array(signatureBuffer))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    return jsonResponse({
+      text,
+      algorithm: "HMAC-SHA256",
+      signature,
+    });
+  }
+
+  // Deno KV TTL 自动过期缓存 API
+  if (pathname === "/api/kv-cache") {
+    if (req.method !== "POST") {
+      return methodNotAllowed(["POST"]);
+    }
+
+    checkRateLimit(req, "kv-cache", 30, 60_000);
+
+    if (!kv) {
+      throw new HttpError(530, "KV 未准备就绪");
+    }
+
+    const key = ["cache", crypto.randomUUID()];
+    const value = { data: "临时缓存数据", created: Date.now() };
+
+    await kv.set(key, value, { expireIn: 60000 });
+
+    return jsonResponse({
+      status: "created",
+      key,
+      ttlSeconds: 60,
+    });
   }
 
   if (pathname === "/api/visit") {
     if (req.method !== "POST") {
-      return methodNotAllowed([
-        "POST",
-      ]);
+      return methodNotAllowed(["POST"]);
     }
 
-    checkRateLimit(
-      req,
-      "visit",
-      30,
-      60_000,
-    );
+    checkRateLimit(req, "visit", 30, 60_000);
 
-    const count =
-      await bumpVisits();
+    const count = await bumpVisits();
 
     if (count === null) {
       return jsonResponse(
         {
           count: null,
-
-          error:
-            kvApiAvailable
-              ? (
-                "Deno KV 初始化失败，" +
-                "访问计数暂不可用"
-              )
-              : (
-                "当前运行时未暴露 " +
-                "Deno.openKv，" +
-                "访问计数暂不可用"
-              ),
-
+          error: kvApiAvailable
+            ? "Deno KV 初始化失败，访问计数暂不可用"
+            : "当前运行时未暴露 Deno.openKv，访问计数暂不可用",
           kvApiAvailable,
           kvError,
         },
-        {
-          status: 503,
-        },
+        { status: 503 },
       );
     }
 
     return jsonResponse({
-      count:
-        count.toString(),
+      count: count.toString(),
     });
   }
 
   if (pathname === "/api/hash") {
     if (req.method !== "POST") {
-      return methodNotAllowed([
-        "POST",
-      ]);
+      return methodNotAllowed(["POST"]);
     }
 
-    checkRateLimit(
-      req,
-      "hash",
-      60,
-      60_000,
-    );
+    checkRateLimit(req, "hash", 60, 60_000);
 
-    const text =
-      await readTextBody(
-        req,
-        MAX_HASH_BYTES,
-      );
+    const text = await readTextBody(req, MAX_HASH_BYTES);
+    const encoded = new TextEncoder().encode(text);
+    const digest = await crypto.subtle.digest("SHA-256", encoded);
 
-    const encoded =
-      new TextEncoder().encode(text);
-
-    const digest =
-      await crypto.subtle.digest(
-        "SHA-256",
-        encoded,
-      );
-
-    const sha256 =
-      Array.from(
-        new Uint8Array(digest),
-      )
-        .map((byte) => {
-          return byte
-            .toString(16)
-            .padStart(2, "0");
-        })
-        .join("");
+    const sha256 = Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
 
     return jsonResponse({
       algorithm: "SHA-256",
@@ -2900,213 +2043,99 @@ async function handleRequest(
     });
   }
 
-  if (
-    pathname === "/api/stream"
-  ) {
+  if (pathname === "/api/stream") {
     if (req.method !== "GET") {
-      return methodNotAllowed([
-        "GET",
-      ]);
+      return methodNotAllowed(["GET"]);
     }
 
-    checkRateLimit(
-      req,
-      "stream",
-      20,
-      60_000,
-    );
+    checkRateLimit(req, "stream", 20, 60_000);
 
     return new Response(
-      createSseStream(
-        DEMO_TEXT,
-        req.signal,
-      ),
+      createSseStream(DEMO_TEXT, req.signal),
       {
         headers: {
-          "content-type":
-            "text/event-stream; charset=utf-8",
-
-          "cache-control":
-            "no-cache, no-transform",
-
-          "x-accel-buffering":
-            "no",
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-cache, no-transform",
+          "x-accel-buffering": "no",
         },
       },
     );
   }
 
-  if (
-    pathname ===
-      "/api/guestbook" &&
-    req.method === "GET"
-  ) {
-    const rawLimit = Number(
-      url.searchParams.get("limit") ??
-        "20",
-    );
+  if (pathname === "/api/guestbook" && req.method === "GET") {
+    const rawLimit = Number(url.searchParams.get("limit") ?? "20");
+    const limit = Number.isFinite(rawLimit)
+      ? Math.max(1, Math.min(Math.floor(rawLimit), 50))
+      : 20;
 
-    const limit =
-      Number.isFinite(rawLimit)
-        ? Math.max(
-          1,
-          Math.min(
-            Math.floor(rawLimit),
-            50,
-          ),
-        )
-        : 20;
-
-    const entries =
-      await listGuestbook(limit);
+    const entries = await listGuestbook(limit);
 
     if (entries === null) {
       return jsonResponse(
         {
-          error:
-            kvApiAvailable
-              ? (
-                "Deno KV 初始化失败，" +
-                "留言板暂不可用"
-              )
-              : (
-                "当前运行时未暴露 " +
-                "Deno.openKv，" +
-                "留言板暂不可用"
-              ),
-
+          error: kvApiAvailable
+            ? "Deno KV 初始化失败，留言板暂不可用"
+            : "当前运行时未暴露 Deno.openKv，留言板暂不可用",
           entries: [],
           kvApiAvailable,
           kvError,
         },
-        {
-          status: 503,
-        },
+        { status: 503 },
       );
     }
 
     return jsonResponse(entries);
   }
 
-  if (
-    pathname ===
-      "/api/guestbook" &&
-    req.method === "POST"
-  ) {
-    checkRateLimit(
-      req,
-      "guestbook-write",
-      5,
-      60_000,
-    );
+  if (pathname === "/api/guestbook" && req.method === "POST") {
+    checkRateLimit(req, "guestbook-write", 5, 60_000);
 
     if (!kv) {
       return jsonResponse(
         {
-          error:
-            kvApiAvailable
-              ? (
-                "Deno KV 初始化失败，" +
-                "无法保存留言"
-              )
-              : (
-                "当前运行时未暴露 " +
-                "Deno.openKv，" +
-                "无法保存留言"
-              ),
-
+          error: kvApiAvailable
+            ? "Deno KV 初始化失败，无法保存留言"
+            : "当前运行时未暴露 Deno.openKv，无法保存留言",
           kvApiAvailable,
           kvError,
         },
-        {
-          status: 503,
-        },
+        { status: 503 },
       );
     }
 
-    const body =
-      await readJsonBody(
-        req,
-        MAX_JSON_BYTES,
-      );
+    const body = await readJsonBody(req, MAX_JSON_BYTES);
 
-    if (
-      typeof body !== "object" ||
-      body === null ||
-      Array.isArray(body)
-    ) {
-      throw new HttpError(
-        400,
-        "请求 JSON 必须是对象",
-      );
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      throw new HttpError(400, "请求 JSON 必须是对象");
     }
 
-    const record =
-      body as Record<
-        string,
-        unknown
-      >;
-
-    const name =
-      normalizeText(
-        record.name || "匿名",
-        MAX_GUESTBOOK_NAME_LENGTH,
-      ) || "匿名";
-
-    const text =
-      normalizeText(
-        record.text,
-        MAX_GUESTBOOK_TEXT_LENGTH,
-      );
+    const record = body as Record<string, unknown>;
+    const name = normalizeText(record.name || "匿名", MAX_GUESTBOOK_NAME_LENGTH) || "匿名";
+    const text = normalizeText(record.text, MAX_GUESTBOOK_TEXT_LENGTH);
 
     if (!text) {
-      throw new HttpError(
-        400,
-        "留言内容不能为空",
-      );
+      throw new HttpError(400, "留言内容不能为空");
     }
 
-    const entry =
-      await addGuestbookEntry(
-        name,
-        text,
-      );
+    const entry = await addGuestbookEntry(name, text);
 
     if (entry === null) {
       return jsonResponse(
-        {
-          error:
-            "Deno KV 不可用，无法保存留言",
-        },
-        {
-          status: 503,
-        },
+        { error: "Deno KV 不可用，无法保存留言" },
+        { status: 503 },
       );
     }
 
-    return jsonResponse(
-      entry,
-      {
-        status: 201,
-      },
-    );
+    return jsonResponse(entry, { status: 201 });
   }
 
-  if (
-    pathname ===
-      "/api/guestbook"
-  ) {
-    return methodNotAllowed([
-      "GET",
-      "POST",
-    ]);
+  if (pathname === "/api/guestbook") {
+    return methodNotAllowed(["GET", "POST"]);
   }
 
   if (pathname === "/ws") {
     if (req.method !== "GET") {
-      return methodNotAllowed([
-        "GET",
-      ]);
+      return methodNotAllowed(["GET"]);
     }
 
     return handleWebSocket(req);
@@ -3117,9 +2146,7 @@ async function handleRequest(
       error: "Not Found",
       path: pathname,
     },
-    {
-      status: 404,
-    },
+    { status: 404 },
   );
 }
 
@@ -3128,67 +2155,40 @@ async function handleRequest(
 // -----------------------------------------------------------------------------
 
 Deno.serve(
-  async (
-    req: Request,
-  ): Promise<Response> => {
+  async (req: Request): Promise<Response> => {
     try {
-      const response =
-        await handleRequest(req);
-
-      return withSecurityHeaders(
-        response,
-      );
+      const response = await handleRequest(req);
+      return withSecurityHeaders(response);
     } catch (error) {
-      if (
-        error instanceof HttpError
-      ) {
+      if (error instanceof HttpError) {
         return withSecurityHeaders(
           jsonResponse(
+            { error: error.message },
             {
-              error:
-                error.message,
-            },
-            {
-              status:
-                error.status,
-
-              headers:
-                error.headers,
+              status: error.status,
+              headers: error.headers,
             },
           ),
         );
       }
 
-      const requestId =
-        crypto.randomUUID();
+      const requestId = crypto.randomUUID();
 
-      console.error(
-        "[Unhandled Error]",
-        {
-          requestId,
-          method: req.method,
-          url: req.url,
-          error:
-            getErrorMessage(error),
-
-          stack:
-            error instanceof Error
-              ? error.stack
-              : undefined,
-        },
-      );
+      console.error("[Unhandled Error]", {
+        requestId,
+        method: req.method,
+        url: req.url,
+        error: getErrorMessage(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
 
       return withSecurityHeaders(
         jsonResponse(
           {
-            error:
-              "服务器内部错误",
-
+            error: "服务器内部错误",
             requestId,
           },
-          {
-            status: 500,
-          },
+          { status: 500 },
         ),
       );
     }
@@ -3198,3 +2198,4 @@ Deno.serve(
 // ============================================================================
 // FILE-END
 // ============================================================================
+export {};
