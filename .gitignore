@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment & Secrets
+.env
+.env.local
+*.env
+
+# Deno & IDE
+.deno/
+.vscode/
+.idea/
+*.log
+
+# OS Junk
+.DS_Store
+Thumbs.db
