@@ -252,6 +252,14 @@ async function initializeKv(): Promise<void> {
 
 if ("cron" in Deno && typeof Deno.cron === "function") {
   Deno.cron("cron-heartbeat", "* * * * *", async () => {
+    if (!kv && "openKv" in Deno && typeof Deno.openKv === "function") {
+      try {
+        kv = await Deno.openKv();
+      } catch (err) {
+        console.error("[Cron] openKv 失败:", getErrorMessage(err));
+      }
+    }
+
     if (kv) {
       try {
         await kv.set(["stats", "last_cron_tick"], new Date().toISOString());
@@ -1469,14 +1477,17 @@ const PAGE_HTML = `<!DOCTYPE html>
       </div>
 
       <div class="card">
-        <div class="card-title">Cron 心跳运行状态</div>
+        <div class="card-title">
+          <span>Cron 心跳运行状态</span>
+          <button id="cron-refresh-btn" type="button" style="font-size:12px; padding:6px 12px;">🔄 刷新状态</button>
+        </div>
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-val" id="cron-spec" style="font-size:20px;">* * * * *</div>
             <div class="stat-lbl">Cron 触发规则 (每分钟)</div>
           </div>
           <div class="stat-card">
-            <div class="stat-val" id="cron-tick" style="font-size:16px;">读取中…</div>
+            <div class="stat-val" id="cron-tick" style="font-size:15px; color:var(--accent);">读取中…</div>
             <div class="stat-lbl">最新 Cron 心跳时间 (last_cron_tick)</div>
           </div>
         </div>
@@ -1606,27 +1617,36 @@ const PAGE_HTML = `<!DOCTYPE html>
   function loadOverview() {
     requestJson("/api/info").then(function (info) {
       var container = byId("overview-stats");
-      if (!container) return;
+      if (container) {
+        var uptimeSec = Math.floor((Date.now() - info.bootTime) / 1000);
+        var items = [
+          { label: "Deno Version", val: info.denoVersion || "N/A" },
+          { label: "V8 Engine", val: info.v8Version || "N/A" },
+          { label: "部署 Region", val: info.region || "Local / Edge" },
+          { label: "运行时时长", val: uptimeSec + " 秒" },
+          { label: "最新 Cron 心跳", val: info.lastCronTick ? new Date(info.lastCronTick).toLocaleTimeString() : "尚未心跳" }
+        ];
 
-      var uptimeSec = Math.floor((Date.now() - info.bootTime) / 1000);
-      var items = [
-        { label: "Deno Version", val: info.denoVersion || "N/A" },
-        { label: "V8 Engine", val: info.v8Version || "N/A" },
-        { label: "部署 Region", val: info.region || "Local / Edge" },
-        { label: "运行时时长", val: uptimeSec + " 秒" },
-        { label: "最新 Cron 心跳", val: info.lastCronTick ? new Date(info.lastCronTick).toLocaleTimeString() : "尚未心跳" }
-      ];
+        container.innerHTML = items.map(function (it) {
+          return '<div class="stat-card"><div class="stat-val">' + it.val + '</div><div class="stat-lbl">' + it.label + '</div></div>';
+        }).join("");
+      }
 
-      setText("cron-tick", info.lastCronTick ? new Date(info.lastCronTick).toLocaleString() : "未检测到 Cron 心跳");
-
-      container.innerHTML = items.map(function (it) {
-        return '<div class="stat-card"><div class="stat-val">' + it.val + '</div><div class="stat-lbl">' + it.label + '</div></div>';
-      }).join("");
+      setText("cron-tick", info.lastCronTick ? new Date(info.lastCronTick).toLocaleString() : "暂未读取到心跳 (点击右侧刷新)");
     }).catch(function (err) {
       console.error("加载 Overview 失败:", err);
     });
   }
   loadOverview();
+  setInterval(loadOverview, 10000);
+
+  var cronRefreshBtn = byId("cron-refresh-btn");
+  if (cronRefreshBtn) {
+    cronRefreshBtn.addEventListener("click", function () {
+      setText("cron-tick", "查询中...");
+      loadOverview();
+    });
+  }
 
   // ---------------------------------------------------------------------------
   // Web Crypto (HMAC & SHA-256)
@@ -1847,6 +1867,14 @@ const PAGE_HTML = `<!DOCTYPE html>
 // -----------------------------------------------------------------------------
 
 async function getDiagnostics() {
+  if (!kv && "openKv" in Deno && typeof Deno.openKv === "function") {
+    try {
+      kv = await Deno.openKv();
+    } catch {
+      // 容错处理
+    }
+  }
+
   let lastCronTick: string | null = null;
   if (kv) {
     try {
