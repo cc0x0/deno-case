@@ -1376,6 +1376,9 @@ const PAGE_HTML = `<!DOCTYPE html>
             <div class="stat-lbl">最新 Cron 心跳时间 (last_cron_tick)</div>
           </div>
         </div>
+      </div>
+    </section>
+
     <!-- [Tab 7] AI 边缘 API 网关 (Phase 1) -->
     <section class="tab-panel" id="tab-ai-gateway">
       <div class="panel-header">
