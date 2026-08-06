@@ -1,66 +1,117 @@
-# 🦕 Deno Deploy 边缘原生能力全景控制台 (deno-case)
+# 🦕 Deno Deploy 边缘原生能力全景控制台 & AI 全栈微应用平台
 
-本项目展示了基于 Deno & Deno Deploy 的单文件边缘应用，无需繁重前端框架与 node_modules 依赖即可实现完整边缘原生能力全景 Dashboard。
-
-## 🌟 核心特性与能力展示
-
-1. **⚡ 实时运行时概览 (Runtime & Env)**：从 `Deno.version` 与 `Deno.env` 提取部署节点、区域与运行时环境参数。
-2. **🔐 Web Crypto API**：
-   - SHA-256 原生哈希计算
-   - **HMAC 安全签名 API** (`/api/crypto-sign`)：零第三方依赖带秘钥安全验签
-3. **💬 WebSocket & KV Watch**：跨节点/实例实时气泡聊天室与在线人数。
-4. **🌊 SSE (Server-Sent Events) 流式输出**：基于 `ReadableStream` 的 Token 打字机实时打字效果。
-5. **📈 Deno KV 数据中心**：
-   - 分布式原子计数器 (`kv.atomic().sum()`)
-   - **KV TTL 自动过期缓存** (`/api/kv-cache`)：支持指定 `expireIn` 自动物理清理
-   - 持久化留言板 (`kv.set()` / `kv.list()`)
-6. **⏱️ Deno Cron 边缘定时任务**：原生 `Deno.cron` 边缘心跳打卡 (`* * * * *`)。
+本项目是一个基于 **Deno & Deno Deploy** 的单文件全栈应用。无需繁重前端框架与打包构建，直接以原生的 TypeScript 与 Web 标准 API 驱动，既展示了边缘网络的原生能力，又集成了现代 AI 网关与全栈微应用服务。
 
 ---
 
-## 🛠️ 本地开发与校验
+## 📖 新手快速了解：什么是 Deno 与边缘计算？
 
-### 安装依赖 (用于 Node / npm 检查环境)
+- **Deno**：由 Node.js 之父开发的下一代 JavaScript / TypeScript 运行时。原生支持 TypeScript、开箱即用的安全性沙箱，且零配置。
+- **Deno Deploy (边缘网络)**：将你的代码同时分发部署到全球 300+ 个 CDN 节点上。用户在东京访问就在东京运行，用户在北京访问就在北京运行，实现 **< 20ms 的超低延迟**。
+
+---
+
+## 🌟 核心功能板块总览
+
+项目划分为了两大核心功能区：
+
+### ⚡ 模块一：边缘基础设施能力展示
+
+1. **⚡ 实时运行时概览 (Runtime & Env)**：实时读取 Deno 运行时版本、V8 引擎版本、部署节点 Region 参数。
+2. **🔐 Web Crypto API**：
+   - SHA-256 原生摘要哈希计算。
+   - **HMAC-SHA256 安全签名 (`/api/crypto-sign`)**：零第三方依赖带秘钥安全防篡改签名。
+3. **💬 WebSocket & Deno KV Watch**：结合 WebSockets 与 Deno KV 跨节点广播，实现多人即时气泡聊天室。
+4. **🌊 SSE (Server-Sent Events) 流式输出**：基于 `ReadableStream` 的 Token 打字机流式动效。
+5. **📈 Deno KV 分布式数据库**：
+   - 原子计数器：`kv.atomic().sum()` 原子的提交访问量。
+   - **TTL 自动过期缓存 (`/api/kv-cache`)**：支持 60 秒自动物理消除的临时缓存条目。
+   - 持久化留言板：`kv.set()` 与 `kv.list()` 时间倒序查询。
+6. **⏱️ Deno Cron 边缘定时心跳**：原生 `Deno.cron` 在云端后台按规则 (`* * * * *`) 运行心跳打卡。
+
+### 🤖 模块二：AI 全栈微应用路线图
+
+7. **🤖 AI 边缘 API 网关与 Token 缓存中转站 (Phase 1 - 已完成)**：
+   - **兼容大模型通用协议**：支持 DeepSeek、OpenAI、SiliconFlow 等 API 代理。
+   - **⚡ Deno KV 智能 Token 缓存**：对 Prompt 进行 SHA-256 哈希作为键，热门提问第二次访问直接从 Deno KV **0ms 零 Token 消耗返回**！
+   - **Demo 模式保障**：在未配置真实 `AI_API_KEY` 时自动启动高保真 Mock 响应，确保全功能顺畅体验。
+8. **📝 AI 文本摘要提炼与金句小卡片生成器 (Phase 2 - 即将开启)**：输入长文本自动生成美化卡片。
+
+---
+
+## 🛠️ 新手开发与代码校验指南
+
+在本地开发时，你可以使用标准的 Node / npm 命令来进行严格的代码质量校验。
+
+### 1. 安装项目依赖
 
 ```bash
 npm install
 ```
 
-### 语法与类型校验 (ESLint & TypeScript)
+### 2. 三重代码质量校验命令 (推荐在提交前运行)
 
 ```bash
-# 运行 ESLint 代码检查
+# 1. 运行 Prettier 一键自动代码美化
+npm run format
+
+# 2. 运行 ESLint 语法规范检查
 npm run lint
 
-# 自动修复 ESLint 问题
-npm run lint:fix
-
-# 运行 TypeScript 类型检查
+# 3. 运行 TypeScript 全局类型检查 (tsc --noEmit)
 npm run check
+
+# 4. 运行 Deno 单元自动化测试
+npm test
 ```
 
-### 运行服务 (基于 Deno)
+### 3. 本地启动服务
 
 ```bash
-# 启动本地开发服务
+# 方式 A：使用 Deno 启动本地开发服务 (推荐，带热更新)
 deno task dev
 
-# 或使用 npm
+# 方式 B：使用 npm 启动
 npm start
 ```
 
----
-
-## 🚀 部署至 Deno Deploy
-
-1. 将代码推送到 GitHub 仓库。
-2. 在 [Deno Deploy 控制台](https://dash.deno.com) 新建项目。
-3. 关联该 GitHub 仓库，入口文件设置为 `main.ts`。
-4. 在 Environment Variables 中配置 `SECRET_KEY`（可选）。
-5. 成功发布后即可使用 Deno KV、Deno Cron 与 Web Crypto 边缘原生服务！
+启动后，在浏览器访问 `http://localhost:8000` 即可查看项目控制台。
 
 ---
 
-## 🔒 自动 pre-commit 语法检查
+## ⚙️ 环境变量配置指南 (Environment Variables)
 
-项目集成了 Git `.git/hooks/pre-commit` 钩子。每次执行 `git commit` 时，系统将自动触发 ESLint 代码检查与 TypeScript 类型检查，确保代码语法质量无误。
+你可以通过项目根目录的 `.env` 文件（本地）或 Deno Deploy 控制台（线上）配置以下变量：
+
+| 变量名        | 说明                               | 示例值                           |
+| :------------ | :--------------------------------- | :------------------------------- |
+| `SECRET_KEY`  | HMAC 签名验签的密钥                | `deno-default-secret-key-2026`   |
+| `AI_API_KEY`  | 大模型 API Key (DeepSeek / OpenAI) | `sk-xxxxxxxxx`                   |
+| `AI_BASE_URL` | 大模型 API 地址 (可选)             | `https://api.deepseek.com`       |
+| `AI_MODEL`    | 调用的模型名称 (可选)              | `deepseek-chat` 或 `gpt-4o-mini` |
+
+---
+
+## 🚀 部署至 Deno Deploy (上线教程)
+
+### 方式 A：GitHub 关联自动部署 (推荐)
+
+1. 将本地代码推送到 GitHub 仓库。
+2. 打开 [Deno Deploy 控制台](https://console.deno.com) 点击 **+ New App** 关联该仓库。
+3. Entrypoint 设置为 `main.ts`。
+4. 在 **Settings -> Environment Variables** 中配置所需变量。
+5. 保存后系统在每次 `git push` 时会自动构建并发布！
+
+### 方式 B：本地命令行一键发布 (deployctl)
+
+设置本地 Access Token 环境变量后，在终端执行：
+
+```bash
+npm run deploy -- --project=你的项目名称
+```
+
+---
+
+## 🛡️ 自动化 Git Pre-commit 质量守护
+
+项目已配置 Git `.git/hooks/pre-commit` 钩子。每次执行 `git commit` 时，系统将自动依次执行 **Prettier 代码美化检查 -> ESLint 检查 -> TypeScript 类型检查**。只有三项检查 100% 通过后才会完成提交，从源头杜绝带病代码上云。
