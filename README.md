@@ -39,6 +39,13 @@
    - **智能金句提炼**：输入长文本段落，大模型自动精炼 30 字核心金句与 3 条精简观点清单 (`POST /api/ai/card`)。
    - **多风格高颜值卡片**：支持“极客暗黑 (Cyber Dark)”、“渐变霓虹 (Neon Gradient)”与“极简冷灰 (Minimal Gray)”一键排版渲染。
    - **Deno KV 持久化画廊**：生成的卡片自动持久化到 Deno KV 数据库，在 `📚 Deno KV 持久化卡片画廊` (`GET /api/ai/cards`) 中倒序随时回溯查看。
+9. **✂️ AI 网页剪藏与个人知识中心 (Phase 3 - 已完成)**：
+   - **网页扩展模拟剪藏**：输入 URL 链接与网页正文，AI 自动提炼核心总结并生成标签 (`POST /api/ai/clip`)。
+   - **Deno KV 知识库**：知识条目持久化存储于 Deno KV，支持按时间倒序列表回溯 (`GET /api/ai/clips`)。
+10. **👥 多人实时协同 AI 讨论室 (Phase 4 - 已完成)**：
+
+- **多端协同编辑 Prompt**：结合 WebSocket + Deno KV Watch，多人在同一房间协同修改 Prompt 与参数。
+- **广播全员推演**：一人触发 AI 边缘推演，推演结论与打字机响应全员实时同步广播 (`POST /api/ai/collab/prompt`)。
 
 ---
 

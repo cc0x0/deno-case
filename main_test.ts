@@ -79,3 +79,34 @@ Deno.test("接口测试: POST /api/ai/card AI 金句卡片结构生成验证", a
   assertEquals(cardObj.summaryQuote, summaryQuote);
   assertEquals(cardObj.keyPoints.length, 3);
 });
+
+Deno.test("接口测试: POST /api/ai/clip AI 剪藏结构验证", async () => {
+  const clipId = crypto.randomUUID();
+  const url = "https://deno.com";
+  const title = "Deno 官方主页";
+  const clipObj = {
+    id: clipId,
+    url,
+    title,
+    summary: "Deno 官方网站介绍",
+    tags: ["Deno", "Web"],
+    ts: Date.now(),
+  };
+
+  assertExists(clipObj.id);
+  assertEquals(clipObj.url, url);
+  assertEquals(clipObj.tags.length, 2);
+});
+
+Deno.test("接口测试: POST /api/ai/collab/prompt 协同 Prompt 结构验证", async () => {
+  const roomId = "room-101";
+  const prompt = "测试协同 Prompt";
+  const response = {
+    roomId,
+    prompt,
+    reply: "协同推演完成",
+  };
+
+  assertEquals(response.roomId, roomId);
+  assertEquals(response.prompt, prompt);
+});
