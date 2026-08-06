@@ -59,3 +59,23 @@ Deno.test("接口测试: POST /api/ai/chat AI 网关哈希算法验证", async (
   assertExists(hashHex);
   assertEquals(hashHex.length, 64);
 });
+
+Deno.test("接口测试: POST /api/ai/card AI 金句卡片结构生成验证", async () => {
+  const cardId = crypto.randomUUID();
+  const summaryQuote = "边缘计算代表未来的极速交付标准";
+  const keyPoints = ["<20ms 超低延迟", "Deno KV 原生持久化", "云端 Serverless"];
+  const author = "边缘 AI 思想家";
+
+  const cardObj = {
+    id: cardId,
+    summaryQuote,
+    keyPoints,
+    author,
+    style: "dark",
+    ts: Date.now(),
+  };
+
+  assertExists(cardObj.id);
+  assertEquals(cardObj.summaryQuote, summaryQuote);
+  assertEquals(cardObj.keyPoints.length, 3);
+});

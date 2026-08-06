@@ -35,7 +35,10 @@
    - **兼容大模型通用协议**：支持 DeepSeek、OpenAI、SiliconFlow 等 API 代理。
    - **⚡ Deno KV 智能 Token 缓存**：对 Prompt 进行 SHA-256 哈希作为键，热门提问第二次访问直接从 Deno KV **0ms 零 Token 消耗返回**！
    - **Demo 模式保障**：在未配置真实 `AI_API_KEY` 时自动启动高保真 Mock 响应，确保全功能顺畅体验。
-8. **📝 AI 文本摘要提炼与金句小卡片生成器 (Phase 2 - 即将开启)**：输入长文本自动生成美化卡片。
+8. **📝 AI 文本摘要提炼与金句排版小卡片生成器 (Phase 2 - 已完成)**：
+   - **智能金句提炼**：输入长文本段落，大模型自动精炼 30 字核心金句与 3 条精简观点清单 (`POST /api/ai/card`)。
+   - **多风格高颜值卡片**：支持“极客暗黑 (Cyber Dark)”、“渐变霓虹 (Neon Gradient)”与“极简冷灰 (Minimal Gray)”一键排版渲染。
+   - **Deno KV 持久化画廊**：生成的卡片自动持久化到 Deno KV 数据库，在 `📚 Deno KV 持久化卡片画廊` (`GET /api/ai/cards`) 中倒序随时回溯查看。
 
 ---
 
