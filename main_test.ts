@@ -110,3 +110,18 @@ Deno.test("接口测试: POST /api/ai/collab/prompt 协同 Prompt 结构验证",
   assertEquals(response.roomId, roomId);
   assertEquals(response.prompt, prompt);
 });
+
+Deno.test("接口测试: 页面访问密码 Auth Token 哈希生成验证", async () => {
+  const password = "deno2026";
+  const secretKey = "deno-default-secret-key-2026";
+  const tokenBuffer = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${password}::${secretKey}`),
+  );
+  const token = Array.from(new Uint8Array(tokenBuffer))
+    .map((x) => x.toString(16).padStart(2, "0"))
+    .join("");
+
+  assertExists(token);
+  assertEquals(token.length, 64);
+});

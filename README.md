@@ -93,12 +93,13 @@ npm start
 
 你可以通过项目根目录的 `.env` 文件（本地）或 Deno Deploy 控制台（线上）配置以下变量：
 
-| 变量名        | 说明                               | 示例值                           |
-| :------------ | :--------------------------------- | :------------------------------- |
-| `SECRET_KEY`  | HMAC 签名验签的密钥                | `deno-default-secret-key-2026`   |
-| `AI_API_KEY`  | 大模型 API Key (DeepSeek / OpenAI) | `sk-xxxxxxxxx`                   |
-| `AI_BASE_URL` | 大模型 API 地址 (可选)             | `https://api.deepseek.com`       |
-| `AI_MODEL`    | 调用的模型名称 (可选)              | `deepseek-chat` 或 `gpt-4o-mini` |
+| 变量名         | 说明                                  | 示例值                           |
+| :------------- | :------------------------------------ | :------------------------------- |
+| `SECRET_KEY`   | HMAC 签名验签的密钥                   | `deno-default-secret-key-2026`   |
+| `APP_PASSWORD` | 🔐 页面访问保护密码 (默认 `deno2026`) | `my_custom_password_123`         |
+| `AI_API_KEY`   | 大模型 API Key (DeepSeek / OpenAI)    | `sk-xxxxxxxxx`                   |
+| `AI_BASE_URL`  | 大模型 API 地址 (可选)                | `https://api.deepseek.com`       |
+| `AI_MODEL`     | 调用的模型名称 (可选)                 | `deepseek-chat` 或 `gpt-4o-mini` |
 
 ---
 

@@ -1166,6 +1166,26 @@ const PAGE_HTML = `<!DOCTYPE html>
 <body>
 <canvas id="bg"></canvas>
 
+<!-- 🔐 页面访问安全保护锁屏弹窗 -->
+<div id="lock-overlay" style="position:fixed; inset:0; z-index:9999; background:rgba(10,14,23,0.85); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); display:none; align-items:center; justify-content:center; padding:20px;">
+  <div style="width:100%; max-width:400px; background:rgba(23,32,51,0.95); border:1px solid var(--border-accent); border-radius:18px; padding:30px 26px; box-shadow:0 20px 50px rgba(0,0,0,0.6); text-align:center; position:relative; overflow:hidden;">
+    <div style="font-size:42px; margin-bottom:12px;">🔐</div>
+    <h2 style="font-size:20px; font-weight:700; color:var(--text); margin-bottom:6px;">Deno Deploy 边缘控制台受安全保护</h2>
+    <p style="font-size:13px; color:var(--muted); margin-bottom:20px; line-height:1.5;">请输入访问密码解锁系统功能与 AI 边缘控制台</p>
+
+    <div style="margin-bottom:16px;">
+      <input id="lock-password-input" type="password" placeholder="输入访问密码 (默认: deno2026)..." style="width:100%; padding:12px 14px; border-radius:10px; background:rgba(0,0,0,0.4); color:var(--text); border:1px solid var(--border); font-size:14px; text-align:center;" autocomplete="current-password" />
+      <div id="lock-error-msg" style="font-size:12px; color:var(--warning); margin-top:8px; display:none;"></div>
+    </div>
+
+    <button id="lock-unlock-btn" type="button" style="width:100%; padding:12px; font-size:14.5px; font-weight:600;">🔓 验证密码并解锁访问</button>
+
+    <div style="margin-top:16px; font-size:11px; color:var(--muted); line-height:1.5;">
+      💡 提示：可通过系统的 <code style="color:var(--accent);">APP_PASSWORD</code> 环境变量修改密码。
+    </div>
+  </div>
+</div>
+
 <div class="mobile-header">
   <div style="font-weight:700; color:var(--accent);">🦕 Deno Deploy 控制台</div>
   <button class="menu-toggle" id="menu-toggle">☰ 菜单</button>
@@ -2352,6 +2372,76 @@ const PAGE_HTML = `<!DOCTYPE html>
 
     if (sendBtn) sendBtn.addEventListener("click", triggerCollab);
   })();
+
+  // ---------------------------------------------------------------------------
+  // 🔐 页面访问密码与安全解锁机制
+  // ---------------------------------------------------------------------------
+  (function setupPasswordProtection() {
+    var lockOverlay = byId("lock-overlay");
+    var passwordInput = byId("lock-password-input");
+    var unlockBtn = byId("lock-unlock-btn");
+    var errorMsg = byId("lock-error-msg");
+
+    function checkAuthStatus() {
+      var savedToken = localStorage.getItem("deno_auth_token") || "";
+      requestJson("/api/auth/status", {
+        headers: savedToken ? { "Authorization": "Bearer " + savedToken } : {}
+      }).then(function (res) {
+        if (res.authenticated) {
+          if (lockOverlay) lockOverlay.style.display = "none";
+        } else {
+          if (lockOverlay) lockOverlay.style.display = "flex";
+        }
+      }).catch(function () {
+        if (lockOverlay) lockOverlay.style.display = "flex";
+      });
+    }
+
+    function doUnlock() {
+      if (!passwordInput || !unlockBtn) return;
+      var password = passwordInput.value || "";
+      if (!password) {
+        if (errorMsg) {
+          errorMsg.textContent = "请输入访问密码";
+          errorMsg.style.display = "block";
+        }
+        return;
+      }
+
+      unlockBtn.disabled = true;
+      unlockBtn.textContent = "正在校验密码...";
+      if (errorMsg) errorMsg.style.display = "none";
+
+      requestJson("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: password })
+      }).then(function (res) {
+        if (res.token) {
+          localStorage.setItem("deno_auth_token", res.token);
+        }
+        if (lockOverlay) lockOverlay.style.display = "none";
+        location.reload();
+      }).catch(function (err) {
+        if (errorMsg) {
+          errorMsg.textContent = err.message || "密码错误，请重试";
+          errorMsg.style.display = "block";
+        }
+      }).finally(function () {
+        unlockBtn.disabled = false;
+        unlockBtn.textContent = "🔓 验证密码并解锁访问";
+      });
+    }
+
+    if (unlockBtn) unlockBtn.addEventListener("click", doUnlock);
+    if (passwordInput) {
+      passwordInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") doUnlock();
+      });
+    }
+
+    checkAuthStatus();
+  })();
 })();
 </script>
 </body>
@@ -2360,6 +2450,78 @@ const PAGE_HTML = `<!DOCTYPE html>
 // -----------------------------------------------------------------------------
 // 诊断信息与运行状态 API
 // -----------------------------------------------------------------------------
+
+// 🔐 页面访问认证状态查询与登录 API
+async function handleAuthRoutes(pathname: string, req: Request): Promise<Response | null> {
+  if (pathname === "/api/auth/status" && req.method === "GET") {
+    const appPassword = Deno.env.get("APP_PASSWORD") || "deno2026";
+    const secretKey = Deno.env.get("SECRET_KEY") || "deno-default-secret-key-2026";
+    const authHeader = req.headers.get("authorization");
+    const cookieHeader = req.headers.get("cookie") || "";
+
+    const expectedTokenBuffer = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(`${appPassword}::${secretKey}`),
+    );
+    const expectedToken = Array.from(new Uint8Array(expectedTokenBuffer))
+      .map((x) => x.toString(16).padStart(2, "0"))
+      .join("");
+
+    let authenticated = false;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.slice(7).trim();
+      if (token === expectedToken) authenticated = true;
+    }
+
+    if (!authenticated && cookieHeader.includes(`deno_auth_session=${expectedToken}`)) {
+      authenticated = true;
+    }
+
+    return jsonResponse({
+      protected: true,
+      authenticated,
+    });
+  }
+
+  if (pathname === "/api/auth/login" && req.method === "POST") {
+    checkRateLimit(req, "auth-login", 10, 60_000);
+
+    const body = (await readJsonBody(req, MAX_JSON_BYTES)) as {
+      password?: unknown;
+    };
+
+    const password = normalizeText(body.password, 100);
+    const expectedPassword = Deno.env.get("APP_PASSWORD") || "deno2026";
+    const secretKey = Deno.env.get("SECRET_KEY") || "deno-default-secret-key-2026";
+
+    if (password !== expectedPassword) {
+      throw new HttpError(401, "密码错误，请输入正确的访问密码");
+    }
+
+    const tokenBuffer = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(`${expectedPassword}::${secretKey}`),
+    );
+    const token = Array.from(new Uint8Array(tokenBuffer))
+      .map((x) => x.toString(16).padStart(2, "0"))
+      .join("");
+
+    const response = jsonResponse({
+      ok: true,
+      token,
+      expiresAt: Date.now() + 7 * 86400 * 1000,
+    });
+
+    response.headers.set(
+      "Set-Cookie",
+      `deno_auth_session=${token}; Path=/; Max-Age=604800; SameSite=Lax`,
+    );
+
+    return response;
+  }
+
+  return null;
+}
 
 async function getDiagnostics() {
   let lastCronTick: string | null = null;
@@ -2442,6 +2604,9 @@ async function handleRequest(req: Request): Promise<Response> {
       instanceId: INSTANCE_ID,
     });
   }
+
+  const authRes = await handleAuthRoutes(pathname, req);
+  if (authRes) return authRes;
 
   if (pathname === "/api/info" || pathname === "/api/diagnostics") {
     if (req.method !== "GET") {
